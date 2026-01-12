@@ -1,8 +1,30 @@
-- name: 🟢 Setup Node.js 20
+name: Recolector Horario Elite
+
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+jobs:
+  recolectar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: 📦 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🟢 Configurar Node.js 20 con Caché
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm' # ⚡ Gracias al package-lock.json, esto ahora volará
+          cache: 'npm'
 
-      - name: 📚 Install dependencies
-        run: npm ci # 🚀 Instalación ultra rápida y segura
+      - name: 🚀 Instalar Dependencias (Modo CI)
+        run: npm ci
+
+      - name: 🤖 Ejecutar Recolector Humano Elite
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: node index.js
