@@ -7,7 +7,7 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // 2. Objetivo: House, publicado en la última hora
-const TARGET = 'https://soundcloud.com/search/sounds?q=*&filter.created_at=last_hour&filter.genre_or_tag=house';
+const TARGET = 'https://soundcloud.com/search/sounds?q=house&filter.duration=medium&filter.created_at=last_hour';
 
 // 3. Tu Función de Scroll Humano (Adaptada para el robot)
 async function humanScroll(page) {
