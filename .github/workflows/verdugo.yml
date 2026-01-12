@@ -1,0 +1,29 @@
+name: El Verdugo (Monitor de Calidad)
+
+on:
+  schedule:
+    # 09:00 UTC = 04:00 AM Perú
+    - cron: '0 9 * * *'
+  workflow_dispatch: # Esto habilita un botón para ejecutarlo manualmente cuando quieras
+
+jobs:
+  limpieza:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Instalar dependencias
+        run: npm install puppeteer @supabase/supabase-js node-fetch
+
+      - name: Ejecutar El Verdugo
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: node monitor.js
