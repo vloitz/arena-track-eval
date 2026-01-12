@@ -6,6 +6,9 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// CONFIGURACIÓN DE PARALELISMO (NUEVO)
+const PARALLEL_POOL_SIZE = 5; // Ajustable: Número de tracks a inspeccionar a la vez
+
 // 2. Objetivo: House, publicado en la última hora
 const TARGET = 'https://soundcloud.com/search/sounds?q=house&filter.duration=medium&filter.created_at=last_hour';
 
@@ -62,7 +65,7 @@ async function ghostClick(page) {
     }
 }
 
-// 6. Scroll Humano (TURBO MODE)
+// 6. Scroll Humano Turbo + Sacudón
 async function humanScroll(page) {
     return await page.evaluate(async () => {
         return new Promise(async (resolve) => {
@@ -70,22 +73,40 @@ async function humanScroll(page) {
             const SELECTOR = '.searchList__item';
             let lastCount = document.querySelectorAll(SELECTOR).length;
             let lastChangeTime = Date.now();
+            let hasReset = false; // Control de reseteo
+
             const NO_CHANGE_TIMEOUT = 5000;
-            console.log("⬇️ Iniciando Scroll TURBO...");
+            const RESET_THRESHOLD = 2000; // 2 segundos sin cambios dispara el sacudón
+
+            console.log("🚀 Iniciando Scroll Turbo con Reseteo...");
+
             while (true) {
-                // DISTANCIA AUMENTADA (600-800px)
-                const distance = 600 + Math.random() * 200;
-                window.scrollBy(0, distance);
-                
-                // PAUSA REDUCIDA (50-100ms)
-                let pause = 50 + Math.random() * 50;
-                
-                await sleep(pause);
+                // 1. SCROLL AGRESIVO (Fuerza Bruta)
+                window.scrollBy(0, window.innerHeight * 4);
+
+                await sleep(100);
+
                 const currentCount = document.querySelectorAll(SELECTOR).length;
+                const timeSinceLastChange = Date.now() - lastChangeTime;
+
                 if (currentCount > lastCount) {
                     lastCount = currentCount;
                     lastChangeTime = Date.now();
-                } else if (Date.now() - lastChangeTime > NO_CHANGE_TIMEOUT) {
+                    hasReset = false; // Resetear bandera si hay música nueva
+                }
+                // 2. SISTEMA DE SACUDÓN (Detección de Bloqueo)
+                else if (timeSinceLastChange > RESET_THRESHOLD && !hasReset) {
+                    console.log("⚠️ Carga trabada. Aplicando sacudón arriba/abajo...");
+                    hasReset = true;
+
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    await sleep(500);
+                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
+                    lastChangeTime = Date.now(); // Reiniciar cronómetro tras el sacudón
+                }
+                // 3. CIERRE FINAL
+                else if (timeSinceLastChange > NO_CHANGE_TIMEOUT) {
                      resolve(currentCount);
                      break;
                 }
@@ -94,10 +115,10 @@ async function humanScroll(page) {
     });
 }
 
-// 7. Función de Inspección "Zero Latency" (SIN FRENO DE MANO)
+// 7. Función de Inspección "Zero Latency" con POOL DE PARALELISMO
 async function inspeccionMetricas() {
-    console.log("\n⚡ === FASE DE INSPECCIÓN ZERO LATENCY (140 TRACKS) ===");
-    
+    console.log("\n⚡ === FASE DE INSPECCIÓN ZERO LATENCY (POOL DE PARALELISMO) ===");
+
     // User-Agent obligatorio para inspección móvil
     const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1';
 
@@ -119,104 +140,106 @@ async function inspeccionMetricas() {
             return;
         }
 
-        console.log(`🚀 Acelerando al máximo para ${tracksToInspect.length} tracks...`);
+        console.log(`🚀 Acelerando al máximo para ${tracksToInspect.length} tracks (Lotes de ${PARALLEL_POOL_SIZE})...`);
 
-        for (let i = 0; i < tracksToInspect.length; i++) {
-            const { url, titulo } = tracksToInspect[i];
-            
-            // Transformar URL a versión móvil
-            const mobileUrl = url.replace('https://soundcloud.com', 'https://m.soundcloud.com');
-            console.log(`[${i + 1}/${tracksToInspect.length}] 🔥 ${mobileUrl}`);
+        // BUCLE CON POOL DE PARALELISMO
+        for (let i = 0; i < tracksToInspect.length; i += PARALLEL_POOL_SIZE) {
+            const chunk = tracksToInspect.slice(i, i + PARALLEL_POOL_SIZE);
 
-            // ⚠️ ELIMINADO: calculateReadingTime (Lectura)
+            // Procesar el lote en paralelo
+            await Promise.all(chunk.map(async (track, index) => {
+                const globalIndex = i + index + 1;
+                const { url, titulo } = track;
 
-            try {
-                // Fetch con User-Agent de iPhone
-                const response = await fetch(mobileUrl, {
-                    headers: {
-                        'User-Agent': MOBILE_UA
+                // Transformar URL a versión móvil
+                const mobileUrl = url.replace('https://soundcloud.com', 'https://m.soundcloud.com');
+                console.log(`[${globalIndex}/${tracksToInspect.length}] 🔥 ${mobileUrl}`);
+
+                try {
+                    // Fetch con User-Agent de iPhone
+                    const response = await fetch(mobileUrl, {
+                        headers: {
+                            'User-Agent': MOBILE_UA
+                        }
+                    });
+
+                    if (response.status === 404 || response.status === 410) {
+                        console.log(`❌ Roto (${response.status}) -> Eliminando.`);
+                        await supabase
+                            .from('tracks')
+                            .update({
+                                plays_iniciales: -1,
+                                ultima_inspeccion: new Date().toISOString()
+                            })
+                            .eq('url', url);
+                        return; // Salir de la función async para este track
                     }
-                });
 
-                if (response.status === 404 || response.status === 410) {
-                    console.log(`❌ Roto (${response.status}) -> Eliminando.`);
-                    await supabase
+                    if (!response.ok) {
+                        console.log(`⚠️ HTTP ${response.status}`);
+                        return;
+                    }
+
+                    const html = await response.text();
+
+                    // Extracción basada en __NEXT_DATA__
+                    const regex = /<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s;
+                    const match = html.match(regex);
+
+                    if (!match) {
+                        console.log(`⚠️ Sin __NEXT_DATA__`);
+                        return;
+                    }
+
+                    const json = JSON.parse(match[1]);
+                    const entities = json.props?.pageProps?.initialStoreState?.entities?.tracks || {};
+
+                    // Búsqueda robusta de la llave
+                    const trackKey = Object.keys(entities).find(k => k.includes('soundcloud:tracks'));
+
+                    if (!trackKey) {
+                        console.log(`⚠️ Key no encontrada`);
+                        return;
+                    }
+
+                    const trackData = entities[trackKey].data;
+
+                    if (!trackData) {
+                        console.log(`⚠️ Data vacía`);
+                        return;
+                    }
+
+                    const extractedData = {
+                        sc_id: trackData.id,
+                        plays_iniciales: trackData.playback_count,
+                        plays_actuales: trackData.playback_count,
+                        likes: trackData.likes_count,
+                        comentarios: trackData.comment_count,
+                        reposts: trackData.reposts_count,
+                        fecha_publicacion: trackData.created_at,
+                        ultima_inspeccion: new Date().toISOString()
+                    };
+
+                    const { error: updateError } = await supabase
                         .from('tracks')
-                        .update({
-                            plays_iniciales: -1,
-                            ultima_inspeccion: new Date().toISOString()
-                        })
+                        .update(extractedData)
                         .eq('url', url);
-                    continue;
+
+                    if (updateError) {
+                        console.error(`❌ DB Error`, updateError);
+                    } else {
+                        // Log simplificado
+                        console.log(`✅ OK: ${extractedData.sc_id} | Plays: ${extractedData.plays_iniciales}`);
+                    }
+
+                } catch (error) {
+                    console.error(`❌ Error en track ${globalIndex}:`, error.message);
                 }
-
-                if (!response.ok) {
-                    console.log(`⚠️ HTTP ${response.status}`);
-                    continue;
-                }
-
-                const html = await response.text();
-                
-                // Extracción basada en __NEXT_DATA__
-                const regex = /<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s;
-                const match = html.match(regex);
-
-                if (!match) {
-                    console.log(`⚠️ Sin __NEXT_DATA__`);
-                    continue;
-                }
-
-                const json = JSON.parse(match[1]);
-                const entities = json.props?.pageProps?.initialStoreState?.entities?.tracks || {};
-                
-                // Búsqueda robusta de la llave
-                const trackKey = Object.keys(entities).find(k => k.includes('soundcloud:tracks'));
-                
-                if (!trackKey) {
-                    console.log(`⚠️ Key no encontrada`);
-                    continue;
-                }
-
-                const trackData = entities[trackKey].data;
-
-                if (!trackData) {
-                    console.log(`⚠️ Data vacía`);
-                    continue;
-                }
-
-                const extractedData = {
-                    sc_id: trackData.id,
-                    plays_iniciales: trackData.playback_count,
-                    plays_actuales: trackData.playback_count,
-                    likes: trackData.likes_count,
-                    comentarios: trackData.comment_count,
-                    reposts: trackData.reposts_count,
-                    fecha_publicacion: trackData.created_at,
-                    ultima_inspeccion: new Date().toISOString()
-                };
-
-                const { error: updateError } = await supabase
-                    .from('tracks')
-                    .update(extractedData)
-                    .eq('url', url); 
-
-				if (updateError) {
-                    console.error(`❌ DB Error`, updateError);
-                } else {
-					// Log simplificado para no perder tiempo en I/O
-					console.log(`✅ OK: ${extractedData.sc_id} | Plays: ${extractedData.plays_iniciales}`);
-                }
-
-            } catch (error) {
-                console.error(`❌ Error:`, error.message);
-            }
-
-            // ⚠️ ELIMINADO: pausaFatiga (Espera humana)
-            // ⚠️ ELIMINADO: Descanso Flash (Pausa cada 40 tracks)
-            // El loop continuará inmediatamente al siguiente track
+            }));
+            // Fin del Promise.all para este lote, el bucle pasa al siguiente inmediatamente
         }
 
-        console.log("\n✅ Inspección 'Zero Latency' completada.");
+        console.log("\n✅ Inspección 'Zero Latency + Parallel Pool' completada.");
 
     } catch (error) {
         console.error("❌ Error General en Inspección:", error);
@@ -225,7 +248,7 @@ async function inspeccionMetricas() {
 
 // 8. Ejecución Principal
 async function run() {
-    console.log("🚀 Iniciando Recolector Humano Elite (Versión ZERO LATENCY)...");
+    console.log("🚀 Iniciando Recolector Humano Elite (Versión PARALLEL POOL)...");
 
     const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
@@ -242,7 +265,6 @@ async function run() {
     });
 
     const page = await browser.newPage();
-    // Timeout ajustado para no colgarse si la red falla por velocidad
     page.setDefaultTimeout(30000);
 
     // Evasión de Huella Digital
@@ -289,7 +311,7 @@ async function run() {
                         el.style.visibility = 'hidden';
                         el.style.opacity = '0';
                         el.style.pointerEvents = 'none';
-                    } 
+                    }
                 } catch (err) {
                     console.error(`Error ocultando ${nombre}`);
                 }
