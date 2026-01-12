@@ -10,7 +10,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // 🛡️ MODO SIMULACRO (DRY RUN)
 // true = Solo avisa en consola, NO borra ni toca la BD.
 // false = El Verdugo actúa de verdad y actualiza/borra.
-const DRY_RUN = true; 
+const DRY_RUN = false; 
 
 // Velocidad: 5 peticiones simultáneas
 const PARALLEL_POOL_SIZE = 5; 
