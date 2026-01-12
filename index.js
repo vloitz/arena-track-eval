@@ -216,10 +216,17 @@ async function inspeccionMetricas() {
                     .update(extractedData)
                     .eq('url', url);
                 
-                if (updateError) {
+				if (updateError) {
                     console.error(`❌ Error al actualizar ${url}:`, updateError);
                 } else {
-                    console.log(`✅ Métricas actualizadas: ${trackData.playback_count} plays, ${trackData.likes_count} likes`);
+					// 🚀 LOG DETALLADO PARA MONITOREO EN TIEMPO REAL
+					console.log(`✅ EXTRACCIÓN EXITOSA:
+				   🆔 ID: ${extractedData.sc_id}
+				   👁️ Plays: ${extractedData.plays_iniciales}
+				   ❤️ Likes: ${extractedData.likes}
+				   💬 Comentarios: ${extractedData.comentarios}
+				   🔄 Reposts: ${extractedData.reposts}
+				   📅 Publicado: ${extractedData.fecha_publicacion}`);
                 }
                 
             } catch (error) {
