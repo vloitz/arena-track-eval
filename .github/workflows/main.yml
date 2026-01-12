@@ -1,0 +1,29 @@
+name: Recolector Horario
+
+on:
+  schedule:
+    # Se ejecuta al minuto 15 de CADA HORA (para no chocar con las horas en punto)
+    - cron: '15 * * * *'
+  workflow_dispatch: # Esto habilita un botón para probarlo manualmente cuando quieras
+
+jobs:
+  recolectar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chequear código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Instalar Dependencias
+        run: npm install
+
+      - name: Ejecutar Recolector
+        env:
+          # Aquí conectamos los secretos que guardaste antes
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: node index.js
