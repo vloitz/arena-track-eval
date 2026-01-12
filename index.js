@@ -46,16 +46,7 @@ async function humanMouseWithShake(page) {
     console.log("🖱️ Movimiento con temblor humano completado");
 }
 
-// 5. Ritmo de Lectura Variable (TURBO DJ WORKFLOW)
-function calculateReadingTime(title) {
-    const baseTime = 20;
-    const charTime = 25;
-    const randomFactor = 0.7 + Math.random() * 0.6;
-    const readingTime = baseTime + (title.length * charTime * randomFactor);
-    return Math.min(readingTime, 1200);
-}
-
-// 6. Click-Stream Fantasma
+// 5. Click-Stream Fantasma
 async function ghostClick(page) {
     const deadZones = [
         { x: 50 + Math.random() * 100, y: 50 + Math.random() * 100 },
@@ -71,7 +62,7 @@ async function ghostClick(page) {
     }
 }
 
-// 7. Scroll Humano
+// 6. Scroll Humano (TURBO MODE)
 async function humanScroll(page) {
     return await page.evaluate(async () => {
         return new Promise(async (resolve) => {
@@ -80,11 +71,15 @@ async function humanScroll(page) {
             let lastCount = document.querySelectorAll(SELECTOR).length;
             let lastChangeTime = Date.now();
             const NO_CHANGE_TIMEOUT = 5000;
-            console.log("⬇️ Iniciando Scroll Humano...");
+            console.log("⬇️ Iniciando Scroll TURBO...");
             while (true) {
-                const distance = 300 + Math.random() * 400;
+                // DISTANCIA AUMENTADA (600-800px)
+                const distance = 600 + Math.random() * 200;
                 window.scrollBy(0, distance);
-                let pause = 100 + Math.random() * 200;
+                
+                // PAUSA REDUCIDA (50-100ms)
+                let pause = 50 + Math.random() * 50;
+                
                 await sleep(pause);
                 const currentCount = document.querySelectorAll(SELECTOR).length;
                 if (currentCount > lastCount) {
@@ -99,10 +94,10 @@ async function humanScroll(page) {
     });
 }
 
-// 8. Función de Inspección "Mobile Turbo" (CORREGIDA FINAL)
+// 7. Función de Inspección "Zero Latency" (SIN FRENO DE MANO)
 async function inspeccionMetricas() {
-    console.log("\n🔍 === FASE DE INSPECCIÓN TURBO MÓVIL (140 TRACKS) ===");
-
+    console.log("\n⚡ === FASE DE INSPECCIÓN ZERO LATENCY (140 TRACKS) ===");
+    
     // User-Agent obligatorio para inspección móvil
     const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1';
 
@@ -124,19 +119,16 @@ async function inspeccionMetricas() {
             return;
         }
 
-        console.log(`📊 Inspeccionando ${tracksToInspect.length} tracks en modo 'Turbo Móvil'...`);
+        console.log(`🚀 Acelerando al máximo para ${tracksToInspect.length} tracks...`);
 
         for (let i = 0; i < tracksToInspect.length; i++) {
             const { url, titulo } = tracksToInspect[i];
-
+            
             // Transformar URL a versión móvil
             const mobileUrl = url.replace('https://soundcloud.com', 'https://m.soundcloud.com');
-            console.log(`\n[${i + 1}/${tracksToInspect.length}] 📱 Inspect: ${mobileUrl}`);
+            console.log(`[${i + 1}/${tracksToInspect.length}] 🔥 ${mobileUrl}`);
 
-            if (titulo) {
-                const readTime = calculateReadingTime(titulo);
-                await new Promise(resolve => setTimeout(resolve, readTime));
-            }
+            // ⚠️ ELIMINADO: calculateReadingTime (Lectura)
 
             try {
                 // Fetch con User-Agent de iPhone
@@ -147,7 +139,7 @@ async function inspeccionMetricas() {
                 });
 
                 if (response.status === 404 || response.status === 410) {
-                    console.log(`❌ URL Rota (${response.status}): Eliminando de la cola...`);
+                    console.log(`❌ Roto (${response.status}) -> Eliminando.`);
                     await supabase
                         .from('tracks')
                         .update({
@@ -159,40 +151,38 @@ async function inspeccionMetricas() {
                 }
 
                 if (!response.ok) {
-                    console.log(`⚠️ Error HTTP ${response.status} (Temporal) para ${url}`);
+                    console.log(`⚠️ HTTP ${response.status}`);
                     continue;
                 }
 
                 const html = await response.text();
-
+                
                 // Extracción basada en __NEXT_DATA__
                 const regex = /<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s;
                 const match = html.match(regex);
 
                 if (!match) {
-                    console.log(`⚠️ No se encontró __NEXT_DATA__ en ${mobileUrl}`);
+                    console.log(`⚠️ Sin __NEXT_DATA__`);
                     continue;
                 }
 
                 const json = JSON.parse(match[1]);
                 const entities = json.props?.pageProps?.initialStoreState?.entities?.tracks || {};
-
-                // --- 📝 CORRECCIÓN FINAL: BÚSQUEDA EXACTA VALIDADA ---
+                
+                // Búsqueda robusta de la llave
                 const trackKey = Object.keys(entities).find(k => k.includes('soundcloud:tracks'));
-
+                
                 if (!trackKey) {
-                    console.log(`⚠️ No se encontró la key del track (soundcloud:tracks) en ${mobileUrl}`);
+                    console.log(`⚠️ Key no encontrada`);
                     continue;
                 }
 
-                // Extracción directa usando .data como solicitado
                 const trackData = entities[trackKey].data;
 
                 if (!trackData) {
-                    console.log(`⚠️ La propiedad .data está vacía en la entidad ${trackKey}`);
+                    console.log(`⚠️ Data vacía`);
                     continue;
                 }
-                // -----------------------------------------------------
 
                 const extractedData = {
                     sc_id: trackData.id,
@@ -208,42 +198,34 @@ async function inspeccionMetricas() {
                 const { error: updateError } = await supabase
                     .from('tracks')
                     .update(extractedData)
-                    .eq('url', url);
+                    .eq('url', url); 
 
 				if (updateError) {
-                    console.error(`❌ Error DB Update:`, updateError);
+                    console.error(`❌ DB Error`, updateError);
                 } else {
-					console.log(`✅ DATAZO CAPTURADO (Móvil):
-				   🆔 ID: ${extractedData.sc_id} | 📅 Pub: ${extractedData.fecha_publicacion}
-				   👁️ Plays: ${extractedData.plays_iniciales} | ❤️ Likes: ${extractedData.likes}
-				   💬 Coms: ${extractedData.comentarios} | 🔄 Reposts: ${extractedData.reposts}`);
+					// Log simplificado para no perder tiempo en I/O
+					console.log(`✅ OK: ${extractedData.sc_id} | Plays: ${extractedData.plays_iniciales}`);
                 }
 
             } catch (error) {
-                console.error(`❌ Error Fetch/Parse:`, error.message);
+                console.error(`❌ Error:`, error.message);
             }
 
-            // Fatiga Turbo (200ms - 500ms)
-            const pausaFatiga = 200 + Math.random() * 300;
-            await new Promise(resolve => setTimeout(resolve, pausaFatiga));
-
-            // Descanso Flash cada 40 tracks (1 segundo)
-            if ((i + 1) % 40 === 0 && i + 1 < tracksToInspect.length) {
-                console.log(`\n⚡ Descanso Flash (1s)...`);
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
+            // ⚠️ ELIMINADO: pausaFatiga (Espera humana)
+            // ⚠️ ELIMINADO: Descanso Flash (Pausa cada 40 tracks)
+            // El loop continuará inmediatamente al siguiente track
         }
 
-        console.log("\n✅ Inspección 'Turbo Móvil' completada.");
+        console.log("\n✅ Inspección 'Zero Latency' completada.");
 
     } catch (error) {
         console.error("❌ Error General en Inspección:", error);
     }
 }
 
-// 9. Ejecución Principal
+// 8. Ejecución Principal
 async function run() {
-    console.log("🚀 Iniciando Recolector Humano Elite (Versión Final Corregida)...");
+    console.log("🚀 Iniciando Recolector Humano Elite (Versión ZERO LATENCY)...");
 
     const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
@@ -260,6 +242,7 @@ async function run() {
     });
 
     const page = await browser.newPage();
+    // Timeout ajustado para no colgarse si la red falla por velocidad
     page.setDefaultTimeout(30000);
 
     // Evasión de Huella Digital
@@ -306,7 +289,7 @@ async function run() {
                         el.style.visibility = 'hidden';
                         el.style.opacity = '0';
                         el.style.pointerEvents = 'none';
-                    }
+                    } 
                 } catch (err) {
                     console.error(`Error ocultando ${nombre}`);
                 }
