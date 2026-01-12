@@ -128,7 +128,7 @@ async function inspeccionMetricas() {
             .select('url, titulo, fecha_ingreso')
             .is('plays_iniciales', null)
             .order('fecha_ingreso', { ascending: false })
-            .limit(140);
+            .limit(300);
 
         if (queryError) {
             console.error("❌ Error al consultar tracks:", queryError);
