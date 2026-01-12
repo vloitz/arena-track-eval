@@ -9,7 +9,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // 2. Objetivo: House, publicado en la última hora
 const TARGET = 'https://soundcloud.com/search/sounds?q=house&filter.duration=medium&filter.created_at=last_hour';
 
-// 3. Array de User-Agents Variables
+// 3. Array de User-Agents Variables (Escritorio - Se mantiene para búsqueda)
 const USER_AGENTS = [
     // Windows 11 - Chrome y Edge (Los más comunes)
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -59,13 +59,13 @@ async function humanMouseWithShake(page) {
     console.log("🖱️ Movimiento con temblor humano completado");
 }
 
-// 5. Ritmo de Lectura Variable
+// 5. Ritmo de Lectura Variable (TURBO DJ WORKFLOW)
 function calculateReadingTime(title) {
-    const baseTime = 30;
-    const charTime = 45;
+    const baseTime = 20; // Reducido de 30
+    const charTime = 25; // Reducido de 45
     const randomFactor = 0.7 + Math.random() * 0.6;
     const readingTime = baseTime + (title.length * charTime * randomFactor);
-    return Math.min(readingTime, 3000);
+    return Math.min(readingTime, 1200); // Tope reducido a 1.2s
 }
 
 // 6. Click-Stream Fantasma
@@ -112,16 +112,19 @@ async function humanScroll(page) {
     });
 }
 
-// 8. Función de Inspección "High Volume" (CORREGIDA)
+// 8. Función de Inspección "Mobile Turbo" (ACTUALIZADA)
 async function inspeccionMetricas() {
-    console.log("\n🔍 === FASE DE INSPECCIÓN DE MÉTRICAS (140 TRACKS - HIGH VOLUME) ===");
+    console.log("\n🔍 === FASE DE INSPECCIÓN TURBO MÓVIL (140 TRACKS) ===");
+
+    // User-Agent obligatorio para inspección móvil
+    const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1';
 
     try {
         const { data: tracksToInspect, error: queryError } = await supabase
             .from('tracks')
-            .select('url, titulo, fecha_ingreso') // CORREGIDO: Usando 'fecha_ingreso'
+            .select('url, titulo, fecha_ingreso')
             .is('plays_iniciales', null)
-            .order('fecha_ingreso', { ascending: false }) // CORREGIDO: Usando 'fecha_ingreso' LIFO
+            .order('fecha_ingreso', { ascending: false })
             .limit(140);
 
         if (queryError) {
@@ -134,11 +137,14 @@ async function inspeccionMetricas() {
             return;
         }
 
-        console.log(`📊 Inspeccionando ${tracksToInspect.length} tracks en modo 'High Volume'...`);
+        console.log(`📊 Inspeccionando ${tracksToInspect.length} tracks en modo 'Turbo Móvil'...`);
 
         for (let i = 0; i < tracksToInspect.length; i++) {
             const { url, titulo } = tracksToInspect[i];
-            console.log(`\n[${i + 1}/${tracksToInspect.length}] Inspeccionando: ${url}`);
+
+            // Transformar URL a versión móvil
+            const mobileUrl = url.replace('https://soundcloud.com', 'https://m.soundcloud.com');
+            console.log(`\n[${i + 1}/${tracksToInspect.length}] 📱 Inspect: ${mobileUrl}`);
 
             if (titulo) {
                 const readTime = calculateReadingTime(titulo);
@@ -146,16 +152,18 @@ async function inspeccionMetricas() {
             }
 
             try {
-                const response = await fetch(url);
+                // Fetch con User-Agent de iPhone
+                const response = await fetch(mobileUrl, {
+                    headers: {
+                        'User-Agent': MOBILE_UA
+                    }
+                });
 
-                // ⚡ Lógica de 'Skip' (404/410) ADAPTADA A TU ESQUEMA
                 if (response.status === 404 || response.status === 410) {
                     console.log(`❌ URL Rota (${response.status}): Eliminando de la cola...`);
                     await supabase
                         .from('tracks')
                         .update({
-                            // ALERTA: No usamos 'status' porque no existe en tu tabla.
-                            // Usamos plays_iniciales = -1 para que 'is(null)' ya no lo detecte.
                             plays_iniciales: -1,
                             ultima_inspeccion: new Date().toISOString()
                         })
@@ -169,21 +177,25 @@ async function inspeccionMetricas() {
                 }
 
                 const html = await response.text();
-                const regex = /window\.__sc_hydration\s*=\s*(\[.*?\]);/s;
+
+                // Extracción basada en __NEXT_DATA__
+                const regex = /<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s;
                 const match = html.match(regex);
 
                 if (!match) {
-                    console.log(`⚠️ No se encontró __sc_hydration en ${url}`);
+                    console.log(`⚠️ No se encontró __NEXT_DATA__ en ${mobileUrl}`);
                     continue;
                 }
 
-                const hydrationData = JSON.parse(match[1]);
+                const json = JSON.parse(match[1]);
+                const entities = json.props?.pageProps?.initialStoreState?.entities?.tracks || {};
 
+                // Buscar la clave correcta (soundcloud:tracks:[ID])
                 let trackData = null;
-                for (const item of hydrationData) {
-                    if (item.hydratable === 'sound' && item.data) {
-                        trackData = item.data;
-                        break;
+                for (const key in entities) {
+                    if (key.startsWith('soundcloud:tracks:')) {
+                        trackData = entities[key];
+                        break; // Tomamos el primer track encontrado (generalmente el principal)
                     }
                 }
 
@@ -201,18 +213,17 @@ async function inspeccionMetricas() {
                     reposts: trackData.reposts_count,
                     fecha_publicacion: trackData.created_at,
                     ultima_inspeccion: new Date().toISOString()
-                    // NOTA: Eliminé 'status' del objeto update para no romper tu tabla
                 };
 
                 const { error: updateError } = await supabase
                     .from('tracks')
                     .update(extractedData)
-                    .eq('url', url);
+                    .eq('url', url); // Actualizamos usando la URL original
 
 				if (updateError) {
                     console.error(`❌ Error DB Update:`, updateError);
                 } else {
-					console.log(`✅ DATAZO CAPTURADO:
+					console.log(`✅ DATAZO CAPTURADO (Móvil):
 				   🆔 ID: ${extractedData.sc_id} | 📅 Pub: ${extractedData.fecha_publicacion}
 				   👁️ Plays: ${extractedData.plays_iniciales} | ❤️ Likes: ${extractedData.likes}
 				   💬 Coms: ${extractedData.comentarios} | 🔄 Reposts: ${extractedData.reposts}`);
@@ -222,18 +233,18 @@ async function inspeccionMetricas() {
                 console.error(`❌ Error Fetch/Parse:`, error.message);
             }
 
-            // Pausa de Fatiga Acelerada (0.5s a 1.0s)
-            const pausaFatiga = 500 + Math.random() * 500;
+            // Fatiga Turbo (200ms - 500ms)
+            const pausaFatiga = 200 + Math.random() * 300;
             await new Promise(resolve => setTimeout(resolve, pausaFatiga));
 
-            // Micro-descanso cada 30 tracks
-            if ((i + 1) % 30 === 0 && i + 1 < tracksToInspect.length) {
-                console.log(`\n☕ Micro-descanso táctico...`);
-                await new Promise(resolve => setTimeout(resolve, 2000));
+            // Descanso Flash cada 40 tracks (1 segundo)
+            if ((i + 1) % 40 === 0 && i + 1 < tracksToInspect.length) {
+                console.log(`\n⚡ Descanso Flash (1s)...`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
 
-        console.log("\n✅ Inspección 'High Volume' completada.");
+        console.log("\n✅ Inspección 'Turbo Móvil' completada.");
 
     } catch (error) {
         console.error("❌ Error General en Inspección:", error);
@@ -242,7 +253,7 @@ async function inspeccionMetricas() {
 
 // 9. Ejecución Principal
 async function run() {
-    console.log("🚀 Iniciando Recolector Humano Elite (Versión High Volume Corregida)...");
+    console.log("🚀 Iniciando Recolector Humano Elite (Versión Turbo Móvil)...");
 
     const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
@@ -310,7 +321,6 @@ async function run() {
                         el.style.pointerEvents = 'none';
                         console.log(`✅ ${nombre} ocultado con éxito.`);
                     } else {
-                        // Si no lo encuentra, no detiene el flujo, solo avisa
                         console.warn(`⚠️ Aviso: No se encontró el elemento '${nombre}' (Selector: ${selector}). Es posible que la estructura haya cambiado.`);
                     }
                 } catch (err) {
@@ -318,7 +328,6 @@ async function run() {
                 }
             }
 
-            // Recuperación de scroll (vital para la extracción)
             try {
                 document.body.style.overflow = 'auto';
                 document.documentElement.style.overflow = 'auto';
@@ -345,9 +354,6 @@ async function run() {
         console.log(`🌾 Recolectados: ${data.length} tracks.`);
 
         if (data.length > 0) {
-            // Nota: Aquí no insertamos 'fecha_ingreso' manualmente,
-            // asumimos que Supabase tiene un default 'now()' en esa columna.
-            // Si no es así, avísame y agregamos: fecha_ingreso: new Date().toISOString()
             const { error } = await supabase
                 .from('tracks')
                 .upsert(data.map(d => ({ url: d.url, titulo: d.titulo })), { onConflict: 'url', ignoreDuplicates: true });
