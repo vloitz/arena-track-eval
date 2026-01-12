@@ -37,22 +37,22 @@ async function humanMouseWithShake(page) {
     const startY = Math.floor(Math.random() * 200) + 50;
     const endX = Math.floor(Math.random() * 400) + 200;
     const endY = Math.floor(Math.random() * 400) + 200;
-    
+
     const cp1X = startX + (Math.random() - 0.5) * 200;
     const cp1Y = startY + (Math.random() - 0.5) * 200;
     const cp2X = endX + (Math.random() - 0.5) * 200;
     const cp2Y = endY + (Math.random() - 0.5) * 200;
-    
+
     const steps = 20 + Math.floor(Math.random() * 15);
-    
+
     for (let i = 0; i <= steps; i++) {
         const t = i / steps;
         const x = Math.pow(1-t, 3) * startX + 3 * Math.pow(1-t, 2) * t * cp1X + 3 * (1-t) * Math.pow(t, 2) * cp2X + Math.pow(t, 3) * endX;
         const y = Math.pow(1-t, 3) * startY + 3 * Math.pow(1-t, 2) * t * cp1Y + 3 * (1-t) * Math.pow(t, 2) * cp2Y + Math.pow(t, 3) * endY;
-        
+
         const shakeX = (Math.random() - 0.5) * 2;
         const shakeY = (Math.random() - 0.5) * 2;
-        
+
         await page.mouse.move(x + shakeX, y + shakeY);
         await new Promise(r => setTimeout(r, 8 + Math.random() * 15));
     }
@@ -62,7 +62,7 @@ async function humanMouseWithShake(page) {
 // 5. Ritmo de Lectura Variable
 function calculateReadingTime(title) {
     const baseTime = 30;
-    const charTime = 45; 
+    const charTime = 45;
     const randomFactor = 0.7 + Math.random() * 0.6;
     const readingTime = baseTime + (title.length * charTime * randomFactor);
     return Math.min(readingTime, 3000);
@@ -89,7 +89,7 @@ async function humanScroll(page) {
     return await page.evaluate(async () => {
         return new Promise(async (resolve) => {
             const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-            const SELECTOR = '.searchList__item'; 
+            const SELECTOR = '.searchList__item';
             let lastCount = document.querySelectorAll(SELECTOR).length;
             let lastChangeTime = Date.now();
             const NO_CHANGE_TIMEOUT = 5000;
@@ -115,70 +115,70 @@ async function humanScroll(page) {
 // 8. Función de Inspección "High Volume" (CORREGIDA)
 async function inspeccionMetricas() {
     console.log("\n🔍 === FASE DE INSPECCIÓN DE MÉTRICAS (140 TRACKS - HIGH VOLUME) ===");
-    
+
     try {
         const { data: tracksToInspect, error: queryError } = await supabase
             .from('tracks')
             .select('url, titulo, fecha_ingreso') // CORREGIDO: Usando 'fecha_ingreso'
             .is('plays_iniciales', null)
             .order('fecha_ingreso', { ascending: false }) // CORREGIDO: Usando 'fecha_ingreso' LIFO
-            .limit(140); 
-        
+            .limit(140);
+
         if (queryError) {
             console.error("❌ Error al consultar tracks:", queryError);
             return;
         }
-        
+
         if (!tracksToInspect || tracksToInspect.length === 0) {
             console.log("✅ No hay tracks pendientes de inspección.");
             return;
         }
-        
+
         console.log(`📊 Inspeccionando ${tracksToInspect.length} tracks en modo 'High Volume'...`);
-        
+
         for (let i = 0; i < tracksToInspect.length; i++) {
             const { url, titulo } = tracksToInspect[i];
             console.log(`\n[${i + 1}/${tracksToInspect.length}] Inspeccionando: ${url}`);
-            
+
             if (titulo) {
                 const readTime = calculateReadingTime(titulo);
                 await new Promise(resolve => setTimeout(resolve, readTime));
             }
-            
+
             try {
                 const response = await fetch(url);
-                
+
                 // ⚡ Lógica de 'Skip' (404/410) ADAPTADA A TU ESQUEMA
                 if (response.status === 404 || response.status === 410) {
                     console.log(`❌ URL Rota (${response.status}): Eliminando de la cola...`);
                     await supabase
                         .from('tracks')
-                        .update({ 
+                        .update({
                             // ALERTA: No usamos 'status' porque no existe en tu tabla.
                             // Usamos plays_iniciales = -1 para que 'is(null)' ya no lo detecte.
-                            plays_iniciales: -1, 
+                            plays_iniciales: -1,
                             ultima_inspeccion: new Date().toISOString()
                         })
                         .eq('url', url);
-                    continue; 
+                    continue;
                 }
-                
+
                 if (!response.ok) {
                     console.log(`⚠️ Error HTTP ${response.status} (Temporal) para ${url}`);
                     continue;
                 }
-                
+
                 const html = await response.text();
                 const regex = /window\.__sc_hydration\s*=\s*(\[.*?\]);/s;
                 const match = html.match(regex);
-                
+
                 if (!match) {
                     console.log(`⚠️ No se encontró __sc_hydration en ${url}`);
                     continue;
                 }
-                
+
                 const hydrationData = JSON.parse(match[1]);
-                
+
                 let trackData = null;
                 for (const item of hydrationData) {
                     if (item.hydratable === 'sound' && item.data) {
@@ -186,12 +186,12 @@ async function inspeccionMetricas() {
                         break;
                     }
                 }
-                
+
                 if (!trackData) {
                     console.log(`⚠️ No se encontraron datos del track en el JSON.`);
                     continue;
                 }
-                
+
                 const extractedData = {
                     sc_id: trackData.id,
                     plays_iniciales: trackData.playback_count,
@@ -203,12 +203,12 @@ async function inspeccionMetricas() {
                     ultima_inspeccion: new Date().toISOString()
                     // NOTA: Eliminé 'status' del objeto update para no romper tu tabla
                 };
-                
+
                 const { error: updateError } = await supabase
                     .from('tracks')
                     .update(extractedData)
                     .eq('url', url);
-                
+
 				if (updateError) {
                     console.error(`❌ Error DB Update:`, updateError);
                 } else {
@@ -217,24 +217,24 @@ async function inspeccionMetricas() {
 				   👁️ Plays: ${extractedData.plays_iniciales} | ❤️ Likes: ${extractedData.likes}
 				   💬 Coms: ${extractedData.comentarios} | 🔄 Reposts: ${extractedData.reposts}`);
                 }
-                
+
             } catch (error) {
                 console.error(`❌ Error Fetch/Parse:`, error.message);
             }
-            
+
             // Pausa de Fatiga Acelerada (0.5s a 1.0s)
             const pausaFatiga = 500 + Math.random() * 500;
             await new Promise(resolve => setTimeout(resolve, pausaFatiga));
-            
+
             // Micro-descanso cada 30 tracks
             if ((i + 1) % 30 === 0 && i + 1 < tracksToInspect.length) {
                 console.log(`\n☕ Micro-descanso táctico...`);
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
         }
-        
+
         console.log("\n✅ Inspección 'High Volume' completada.");
-        
+
     } catch (error) {
         console.error("❌ Error General en Inspección:", error);
     }
@@ -243,24 +243,24 @@ async function inspeccionMetricas() {
 // 9. Ejecución Principal
 async function run() {
     console.log("🚀 Iniciando Recolector Humano Elite (Versión High Volume Corregida)...");
-    
+
     const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-    
-    const browser = await puppeteer.launch({ 
+
+    const browser = await puppeteer.launch({
         headless: 'shell',
         args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox', 
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--disable-blink-features=AutomationControlled',
             '--disable-features=IsolateOrigins,site-per-process'
         ],
         userDataDir: '/tmp/puppeteer-data'
-    }); 
-    
+    });
+
     const page = await browser.newPage();
-    page.setDefaultTimeout(30000); 
-    
+    page.setDefaultTimeout(30000);
+
     // Evasión de Huella Digital
     await page.evaluateOnNewDocument(() => {
         Object.defineProperty(navigator, 'webdriver', { get: () => false });
@@ -273,23 +273,67 @@ async function run() {
         Object.defineProperty(navigator, 'plugins', { get: () => [{ name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }, { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' }, { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }] });
         Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en', 'es'] });
     });
-    
+
     await page.setUserAgent(randomUA);
-    
+
     await page.setRequestInterception(true);
     page.on('request', (req) => {
         if (['image', 'stylesheet', 'font'].includes(req.resourceType())) req.abort();
         else req.continue();
     });
-    
+
     try {
         console.log("🌍 Viajando a SoundCloud...");
         await page.goto(TARGET, { waitUntil: 'domcontentloaded' });
-        
+
+
+// --- 🛡️ INICIO: BLINDAJE TOTAL CON REPORTES DE ERROR ---
+        await page.evaluate(() => {
+            const selectors = {
+                "Cookies": '#onetrust-banner-sdk',
+                "Filtro Oscuro": '.onetrust-pc-dark-filter',
+                "Banners Publicidad": '.l-product-banners',
+                "Panel de Filtros": '.l-fixed-left',
+                "Barra Navegación": 'header[role="banner"]',
+                "Banner Get Heard": '.m-get_heard',
+                "Diálogo Privacidad": 'div[role="dialog"][aria-label*="privacidad"]'
+            };
+
+            console.log("🕵️ Iniciando limpieza de interfaz...");
+
+            for (const [nombre, selector] of Object.entries(selectors)) {
+                try {
+                    const el = document.querySelector(selector);
+                    if (el) {
+                        el.style.visibility = 'hidden';
+                        el.style.opacity = '0';
+                        el.style.pointerEvents = 'none';
+                        console.log(`✅ ${nombre} ocultado con éxito.`);
+                    } else {
+                        // Si no lo encuentra, no detiene el flujo, solo avisa
+                        console.warn(`⚠️ Aviso: No se encontró el elemento '${nombre}' (Selector: ${selector}). Es posible que la estructura haya cambiado.`);
+                    }
+                } catch (err) {
+                    console.error(`❌ Error crítico al intentar ocultar ${nombre}:`, err.message);
+                }
+            }
+
+            // Recuperación de scroll (vital para la extracción)
+            try {
+                document.body.style.overflow = 'auto';
+                document.documentElement.style.overflow = 'auto';
+                const mainContent = document.querySelector('.l-container');
+                if (mainContent) mainContent.style.marginLeft = '0';
+            } catch (e) {
+                console.warn("⚠️ No se pudo forzar el reajuste del layout, pero el bot continuará.");
+            }
+        });
+        // --- 🛡️ FIN: BLINDAJE TOTAL ---
+
         await humanMouseWithShake(page);
         await humanScroll(page);
         await ghostClick(page);
-        
+
         const data = await page.evaluate(() => {
             const items = document.querySelectorAll('.searchList__item a.soundTitle__title');
             return Array.from(items).map(a => ({
@@ -297,32 +341,32 @@ async function run() {
                 titulo: a.innerText.trim()
             }));
         });
-        
+
         console.log(`🌾 Recolectados: ${data.length} tracks.`);
-        
+
         if (data.length > 0) {
-            // Nota: Aquí no insertamos 'fecha_ingreso' manualmente, 
+            // Nota: Aquí no insertamos 'fecha_ingreso' manualmente,
             // asumimos que Supabase tiene un default 'now()' en esa columna.
             // Si no es así, avísame y agregamos: fecha_ingreso: new Date().toISOString()
             const { error } = await supabase
                 .from('tracks')
                 .upsert(data.map(d => ({ url: d.url, titulo: d.titulo })), { onConflict: 'url', ignoreDuplicates: true });
-            
+
             if (error) console.error("❌ Error DB Upsert:", error);
             else console.log("✅ URLs nuevas sembradas en la nube.");
         } else {
             console.log("⚠️ No se encontró música nueva en esta hora.");
         }
-        
+
         await ghostClick(page);
-        
+
     } catch (e) {
         console.error("❌ Error crítico en recolección:", e);
     } finally {
         if (browser) await browser.close();
         console.log("🔒 Navegador cerrado. Iniciando fase de procesamiento de datos...");
     }
-    
+
     await inspeccionMetricas();
 }
 
