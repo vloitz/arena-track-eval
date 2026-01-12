@@ -11,24 +11,11 @@ const TARGET = 'https://soundcloud.com/search/sounds?q=house&filter.duration=med
 
 // 3. Array de User-Agents Variables (Escritorio - Se mantiene para búsqueda)
 const USER_AGENTS = [
-    // Windows 11 - Chrome y Edge (Los más comunes)
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
-
-    // macOS - Chrome y Safari
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15',
-
-    // Linux (Muy común en entornos de desarrollo)
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-
-    // Versiones ligeramente anteriores (Para simular usuarios que no actualizan al día)
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-
-    // Firefox (Es vital tenerlo para romper el patrón de WebKit/Chrome)
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:122.0) Gecko/20100101 Firefox/122.0'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0'
 ];
 
 // 4. Curva de Bézier con Micro-Temblor
@@ -61,11 +48,11 @@ async function humanMouseWithShake(page) {
 
 // 5. Ritmo de Lectura Variable (TURBO DJ WORKFLOW)
 function calculateReadingTime(title) {
-    const baseTime = 20; // Reducido de 30
-    const charTime = 25; // Reducido de 45
+    const baseTime = 20;
+    const charTime = 25;
     const randomFactor = 0.7 + Math.random() * 0.6;
     const readingTime = baseTime + (title.length * charTime * randomFactor);
-    return Math.min(readingTime, 1200); // Tope reducido a 1.2s
+    return Math.min(readingTime, 1200);
 }
 
 // 6. Click-Stream Fantasma
@@ -112,7 +99,7 @@ async function humanScroll(page) {
     });
 }
 
-// 8. Función de Inspección "Mobile Turbo" (ACTUALIZADA)
+// 8. Función de Inspección "Mobile Turbo" (CORREGIDA FINAL)
 async function inspeccionMetricas() {
     console.log("\n🔍 === FASE DE INSPECCIÓN TURBO MÓVIL (140 TRACKS) ===");
 
@@ -190,19 +177,22 @@ async function inspeccionMetricas() {
                 const json = JSON.parse(match[1]);
                 const entities = json.props?.pageProps?.initialStoreState?.entities?.tracks || {};
 
-                // Buscar la clave correcta (soundcloud:tracks:[ID])
-                let trackData = null;
-                for (const key in entities) {
-                    if (key.startsWith('soundcloud:tracks:')) {
-                        trackData = entities[key];
-                        break; // Tomamos el primer track encontrado (generalmente el principal)
-                    }
-                }
+                // --- 📝 CORRECCIÓN FINAL: BÚSQUEDA EXACTA VALIDADA ---
+                const trackKey = Object.keys(entities).find(k => k.includes('soundcloud:tracks'));
 
-                if (!trackData) {
-                    console.log(`⚠️ No se encontraron datos del track en el JSON.`);
+                if (!trackKey) {
+                    console.log(`⚠️ No se encontró la key del track (soundcloud:tracks) en ${mobileUrl}`);
                     continue;
                 }
+
+                // Extracción directa usando .data como solicitado
+                const trackData = entities[trackKey].data;
+
+                if (!trackData) {
+                    console.log(`⚠️ La propiedad .data está vacía en la entidad ${trackKey}`);
+                    continue;
+                }
+                // -----------------------------------------------------
 
                 const extractedData = {
                     sc_id: trackData.id,
@@ -218,7 +208,7 @@ async function inspeccionMetricas() {
                 const { error: updateError } = await supabase
                     .from('tracks')
                     .update(extractedData)
-                    .eq('url', url); // Actualizamos usando la URL original
+                    .eq('url', url);
 
 				if (updateError) {
                     console.error(`❌ Error DB Update:`, updateError);
@@ -253,7 +243,7 @@ async function inspeccionMetricas() {
 
 // 9. Ejecución Principal
 async function run() {
-    console.log("🚀 Iniciando Recolector Humano Elite (Versión Turbo Móvil)...");
+    console.log("🚀 Iniciando Recolector Humano Elite (Versión Final Corregida)...");
 
     const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
@@ -297,8 +287,7 @@ async function run() {
         console.log("🌍 Viajando a SoundCloud...");
         await page.goto(TARGET, { waitUntil: 'domcontentloaded' });
 
-
-// --- 🛡️ INICIO: BLINDAJE TOTAL CON REPORTES DE ERROR ---
+        // --- 🛡️ BLINDAJE TOTAL ---
         await page.evaluate(() => {
             const selectors = {
                 "Cookies": '#onetrust-banner-sdk',
@@ -310,8 +299,6 @@ async function run() {
                 "Diálogo Privacidad": 'div[role="dialog"][aria-label*="privacidad"]'
             };
 
-            console.log("🕵️ Iniciando limpieza de interfaz...");
-
             for (const [nombre, selector] of Object.entries(selectors)) {
                 try {
                     const el = document.querySelector(selector);
@@ -319,25 +306,19 @@ async function run() {
                         el.style.visibility = 'hidden';
                         el.style.opacity = '0';
                         el.style.pointerEvents = 'none';
-                        console.log(`✅ ${nombre} ocultado con éxito.`);
-                    } else {
-                        console.warn(`⚠️ Aviso: No se encontró el elemento '${nombre}' (Selector: ${selector}). Es posible que la estructura haya cambiado.`);
                     }
                 } catch (err) {
-                    console.error(`❌ Error crítico al intentar ocultar ${nombre}:`, err.message);
+                    console.error(`Error ocultando ${nombre}`);
                 }
             }
-
             try {
                 document.body.style.overflow = 'auto';
                 document.documentElement.style.overflow = 'auto';
                 const mainContent = document.querySelector('.l-container');
                 if (mainContent) mainContent.style.marginLeft = '0';
-            } catch (e) {
-                console.warn("⚠️ No se pudo forzar el reajuste del layout, pero el bot continuará.");
-            }
+            } catch (e) {}
         });
-        // --- 🛡️ FIN: BLINDAJE TOTAL ---
+        // --- FIN BLINDAJE ---
 
         await humanMouseWithShake(page);
         await humanScroll(page);
