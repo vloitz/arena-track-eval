@@ -1,5 +1,6 @@
 const { createClient } = require('@supabase/supabase-js');
-const fetch = require('node-fetch'); // Necesario para GitHub Actions
+// Importación dinámica para compatibilidad con Node 18+ y node-fetch v3
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 // --- 1. CONFIGURACIÓN ---
 const SUPABASE_URL = process.env.SUPABASE_URL;
