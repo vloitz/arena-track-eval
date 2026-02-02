@@ -213,35 +213,86 @@ async function procesarLote(tracks) {
     }));
 }
 
-// --- 5. EJECUCIÓN PRINCIPAL ---
+// --- 5. EJECUCIÓN PRINCIPAL (ARQUITECTURA DINÁMICA DE TIEMPO) ---
 async function run() {
-    console.log(`💀 INICIANDO VERDUGO - DRY RUN: ${DRY_RUN}`);
+    // 1. OBTENCIÓN DEL TIEMPO REAL
+    // Si estamos en GitHub, usamos la marca de tiempo del YAML.
+    // Si estamos en local (PC), usamos "ahora" para no romper el código.
+    const jobStartTime = process.env.JOB_START_TIME
+        ? parseInt(process.env.JOB_START_TIME)
+        : Date.now();
 
-    // Traemos tracks que NO sean graduados.
-    // Ordenamos por antigüedad para auditar primero los más viejos.
-    const { data: tracks, error } = await supabase
-        .from('tracks')
-        .select('*')
-        .neq('fase', 'graduado')
-        .order('fecha_ingreso', { ascending: true })
-        .limit(200);
+    // 2. DEFINICIÓN DE LÍMITES
+    const GITHUB_HARD_LIMIT = 15 * 60 * 1000; // 15 Minutos exactos
+    const SAFETY_BUFFER = 30 * 1000; // 30 segundos para cerrar conexiones y guardar logs
 
-    if (error) {
-        console.error("Error BD:", error);
-        return;
+    // 3. CÁLCULO DE LA MUERTE
+    // El momento exacto en el futuro donde DEBEMOS parar sí o sí.
+    const DEADLINE = jobStartTime + GITHUB_HARD_LIMIT - SAFETY_BUFFER;
+
+    let ciclo = 1;
+    let totalProcesados = 0;
+
+    console.log(`⏱️ INICIO DINÁMICO DETECTADO.`);
+    console.log(`📅 Timestamp Inicio Job: ${jobStartTime}`);
+    console.log(`🎯 Deadline Calculado: ${new Date(DEADLINE).toISOString()}`);
+
+    // Bucle: Mientras la hora actual sea menor que el Deadline
+    while (Date.now() < DEADLINE) {
+
+        // Matemáticas para mostrar en consola
+        const tiempoRestanteMs = DEADLINE - Date.now();
+
+        console.log(`\n🔄 --- CICLO ${ciclo} (Restan ${(tiempoRestanteMs/1000).toFixed(0)}s) ---`);
+
+        // 1. Filtro de Rotación (4 horas)
+        // ESTRICTAMENTE NECESARIO: Evita revisar los mismos tracks infinitamente en el mismo job
+        const hace4Horas = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+
+        const { data: tracks, error } = await supabase
+            .from('tracks')
+            .select('*')
+            .neq('fase', 'graduado')
+            .lt('ultima_inspeccion', hace4Horas) // <--- CRÍTICO: Rotación de inventario
+            .order('fecha_ingreso', { ascending: true })
+            .limit(100); // Lotes pequeños para agilidad
+
+        if (error) {
+            console.error("❌ Error Crítico BD:", error);
+            break;
+        }
+
+        if (!tracks || tracks.length === 0) {
+            console.log("✅ Tarea cumplida: No hay más tracks pendientes por hoy.");
+            break;
+        }
+
+        // 2. Procesamiento del Lote
+        for (let i = 0; i < tracks.length; i += PARALLEL_POOL_SIZE) {
+
+            // EL CHECK FINAL (PRECISIÓN QUIRÚRGICA)
+            // Si nos pasamos del tiempo, abortamos INMEDIATAMENTE para evitar error de GitHub
+            if (Date.now() > DEADLINE) {
+                console.log("🛑 DEADLINE ALCANZADO. Aterrizaje de emergencia...");
+                i = tracks.length; // Romper bucle for
+                break; // Romper bucle while
+            }
+
+            const lote = tracks.slice(i, i + PARALLEL_POOL_SIZE);
+            await procesarLote(lote);
+            totalProcesados += lote.length;
+        }
+
+        // Doble check para salir del while inmediatamente si el for rompió
+        if (Date.now() > DEADLINE) break;
+
+        ciclo++;
+        await new Promise(r => setTimeout(r, 1000)); // Respiro para la BD
     }
 
-    if (!tracks || tracks.length === 0) {
-        console.log("✅ No hay tracks para auditar.");
-        return;
-    }
-
-    // Procesar en lotes paralelos
-    for (let i = 0; i < tracks.length; i += PARALLEL_POOL_SIZE) {
-        const lote = tracks.slice(i, i + PARALLEL_POOL_SIZE);
-        await procesarLote(lote);
-    }
-    console.log("\n🏁 Auditoría finalizada.");
+    console.log(`\n🏁 SESIÓN FINALIZADA.`);
+    console.log(`📊 Total Auditados: ${totalProcesados}`);
+    console.log(`⏱️ Duración Total del Job: ${((Date.now() - jobStartTime)/1000).toFixed(1)}s / 900s`);
 }
 
 run();
