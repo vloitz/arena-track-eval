@@ -211,11 +211,18 @@ async function inspeccionMetricas() {
 
                     const extractedData = {
                         sc_id: trackData.id,
+
+                        // --- 📸 SNAPSHOT FASE 3.5 (MEMORIA INICIAL) ---
                         plays_iniciales: trackData.playback_count,
+                        likes_iniciales: trackData.likes_count,          // <--- NUEVO
+                        comentarios_iniciales: trackData.comment_count,  // <--- NUEVO
+
+                        // Datos Actuales
                         plays_actuales: trackData.playback_count,
                         likes: trackData.likes_count,
                         comentarios: trackData.comment_count,
                         reposts: trackData.reposts_count,
+
                         fecha_publicacion: trackData.created_at,
                         ultima_inspeccion: new Date().toISOString()
                     };
@@ -229,7 +236,8 @@ async function inspeccionMetricas() {
                         console.error(`❌ DB Error`, updateError);
                     } else {
                         // Log simplificado
-                        console.log(`✅ OK: ${extractedData.sc_id} | Plays: ${extractedData.plays_iniciales}`);
+                        // Log Fase 3.5: Confirmación de Memoria
+                        console.log(`✅ OK: ${extractedData.sc_id} | Init(P:${extractedData.plays_iniciales}/L:${extractedData.likes_iniciales}/C:${extractedData.comentarios_iniciales})`);
                     }
 
                 } catch (error) {
@@ -246,9 +254,20 @@ async function inspeccionMetricas() {
     }
 }
 
-// 8. Ejecución Principal
+
+// 8. Ejecución Principal (CON PRECISIÓN DINÁMICA DE TIEMPO)
 async function run() {
+    // 1. OBTENCIÓN DEL TIEMPO REAL (Safety Layer)
+    // Leemos la marca de tiempo del YAML para saber cuánto tardó el Setup
+    const jobStartTime = process.env.JOB_START_TIME
+        ? parseInt(process.env.JOB_START_TIME)
+        : Date.now();
+
+    // Límite duro de GitHub (15m) - 30s de Buffer para cierre limpio
+    const DEADLINE = jobStartTime + (15 * 60 * 1000) - 30000;
+
     console.log("🚀 Iniciando Recolector Humano Elite (Versión PARALLEL POOL)...");
+    console.log(`⏱️ Sincronización de Reloj: Setup consumió ${((Date.now() - jobStartTime)/1000).toFixed(1)}s`);
 
     const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
@@ -289,6 +308,9 @@ async function run() {
     });
 
     try {
+        // CHECK DE SEGURIDAD 1: ¿Nos queda tiempo para navegar?
+        if (Date.now() > DEADLINE) throw new Error("Tiempo agotado antes de navegar");
+
         console.log("🌍 Viajando a SoundCloud...");
         await page.goto(TARGET, { waitUntil: 'domcontentloaded' });
 
@@ -356,10 +378,18 @@ async function run() {
         console.error("❌ Error crítico en recolección:", e);
     } finally {
         if (browser) await browser.close();
-        console.log("🔒 Navegador cerrado. Iniciando fase de procesamiento de datos...");
+        console.log("🔒 Navegador cerrado.");
     }
 
-    await inspeccionMetricas();
+    // CHECK DE SEGURIDAD 2: ¿Nos queda tiempo para inspeccionar métricas?
+    if (Date.now() < DEADLINE) {
+        console.log("⚡ Iniciando fase de procesamiento de datos...");
+        await inspeccionMetricas();
+    } else {
+        console.log("🛑 Tiempo agotado. Saltando inspección de métricas por seguridad.");
+    }
+
+    console.log(`🏁 Fin del Trabajo. Duración Total: ${((Date.now() - jobStartTime)/1000).toFixed(1)}s`);
 }
 
 run();
