@@ -10,133 +10,171 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // 🛡️ MODO SIMULACRO (DRY RUN)
 // true = Solo avisa en consola, NO borra ni toca la BD.
 // false = El Verdugo actúa de verdad y actualiza/borra.
-const DRY_RUN = false; 
+const DRY_RUN = false;
 
-// Velocidad: 5 peticiones simultáneas
-const PARALLEL_POOL_SIZE = 5; 
+// Velocidad: 10 peticiones simultáneas (Fase 3.5 Detective)
+const PARALLEL_POOL_SIZE = 10;
+const MAX_RETRIES = 2; // Intentos antes de rendirse si no hay raíz
 const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1';
 
-// PONDERACIÓN DEL HYPE SCORE
-const POINTS = { PLAY: 1, LIKE: 10, REPOST: 20, COMMENT: 30 };
+// NUEVA PONDERACIÓN FASE 3.5 (Enfoque Humano)
+// Comentarios (60%) > Likes (30%) > Reposts (10%)
+const POINTS = {
+    PLAY: 0.01,   // Ruido (casi nulo)
+    LIKE: 30,     // Plata
+    REPOST: 10,   // Bronce (puede ser bot/gate)
+    COMMENT: 60   // Oro Puro
+};
 
 // --- 2. CÁLCULOS MATEMÁTICOS ---
 function calcularHype(plays, likes, reposts, comments, dias) {
-    if (dias < 1) dias = 1; 
+    if (dias < 1) dias = 1;
     const rawScore = (plays * POINTS.PLAY) + (likes * POINTS.LIKE) + (reposts * POINTS.REPOST) + (comments * POINTS.COMMENT);
     return rawScore / dias; // Velocidad de puntos por día
 }
 
-// --- 3. EL CEREBRO DEL VERDUGO ---
+// --- 3. EL CEREBRO DEL DETECTIVE (FASE 3.5) ---
 function juzgarTrack(track, statsActuales, diasAntiguedad) {
     const { plays_actuales, likes, comentarios, reposts } = statsActuales;
-    const interacciones = likes + comentarios + reposts;
 
-    // CÁLCULO DE PROYECCIONES
-    const hypeScore = calcularHype(plays_actuales, likes, reposts, comentarios, diasAntiguedad);
-    const proyeccionVistas = (plays_actuales / diasAntiguedad) * 30;
-    const proyeccionHype = hypeScore * 30;
+    // 1. Cálculo de Calidad Humana (Score)
+    // Usamos los nuevos pesos para ignorar el ruido de los plays
+    const interacciones = likes + comentarios + reposts;
+    const rawScore = (plays_actuales * POINTS.PLAY) + (likes * POINTS.LIKE) + (reposts * POINTS.REPOST) + (comentarios * POINTS.COMMENT);
+    const hypeScore = rawScore / (diasAntiguedad || 1); // Velocidad diaria
+
+    // 2. Factor Exponencial (Memoria)
+    // Comparamos con la foto del inicio (si existe)
+    let factorCrecimiento = 1;
+    let mensajeCrecimiento = "Sin datos previos";
+
+    if (track.likes_iniciales !== null && track.likes_iniciales > 0) {
+        factorCrecimiento = likes / track.likes_iniciales;
+        mensajeCrecimiento = `x${factorCrecimiento.toFixed(1)} (Ini:${track.likes_iniciales} -> Hoy:${likes})`;
+    }
 
     const resultado = {
-        accion: 'UPDATE', 
-        razon: 'Sobrevive',
+        accion: 'UPDATE', // Por defecto, observamos
+        razon: 'En observación',
         nuevosDatos: {
             plays_actuales, likes, comentarios, reposts,
             hype_score: hypeScore,
-            proyeccion_vistas_30d: proyeccionVistas,
-            proyeccion_hype_30d: proyeccionHype,
             ultima_inspeccion: new Date().toISOString()
         }
     };
 
-    // --- 🚪 PUERTA 1: LA MORGUE (Día 3) ---
-    if (diasAntiguedad >= 3 && diasAntiguedad < 7) {
-        if (plays_actuales === 0 && interacciones === 0) {
+    // --- 🚉 ESTACIÓN 1: PRUEBA DE VIDA (Día 3.5 - 5) ---
+    if (diasAntiguedad >= 3 && diasAntiguedad < 6) {
+        // Si nadie interactuó en casi 4 días, es basura.
+        if (interacciones === 0 && plays_actuales < 50) {
             resultado.accion = 'DELETE';
-            resultado.razon = 'Muerte Cerebral (0/0 en Día 3)';
+            resultado.razon = '💀 Muerte Cerebral (0 interacciones en Estación 1)';
             return resultado;
+        }
+        resultado.razon = '🌱 Sobrevivió Estación 1 (Tiene vida)';
+    }
+
+    // --- 🚉 ESTACIÓN 2: INERCIA (Día 7 - 10) ---
+    if (diasAntiguedad >= 7 && diasAntiguedad < 12) {
+        // Si tiene likes pero no ha crecido NADA desde el inicio (si tenemos memoria)
+        if (track.likes_iniciales > 0 && factorCrecimiento <= 1.0) {
+            // No lo borramos, lo mandamos al Baúl (Hibernación)
+            resultado.nuevosDatos.fase = 'hibernando';
+            resultado.razon = '💤 Estancado (Sin crecimiento vs Inicio)';
+        } else if (factorCrecimiento >= 2) {
+             resultado.razon = `🚀 Exponencial detectado: ${mensajeCrecimiento}`;
         }
     }
 
-    // --- 🚪 PUERTA 2: DETECTOR DE FRAUDE (Día 7) ---
-    if (diasAntiguedad >= 7 && diasAntiguedad < 14) {
-        if (plays_actuales < 15) {
-            resultado.accion = 'DELETE';
-            resultado.razon = 'Falta de Tracción (<15 plays en Día 7)';
-            return resultado;
-        }
-        if (plays_actuales > 50 && interacciones < 2) {
-            resultado.accion = 'DELETE';
-            resultado.razon = 'Sospecha de Bot (Vistas altas sin interacción)';
-            return resultado;
-        }
-    }
+    // --- 🚉 ESTACIÓN 3: EL JUICIO FINAL (Día 21+) ---
+    if (diasAntiguedad >= 21) {
+        // Si llegó hasta aquí, ¿es un éxito o un zombie?
 
-    // --- 🚪 PUERTA 3: PRUEBA DE VIDA (Día 14) ---
-    if (diasAntiguedad >= 14 && diasAntiguedad < 28) {
-        const crecimientVistas = plays_actuales - (track.plays_actuales || 0); 
-        
-        if (crecimientVistas <= 0) {
-            // INMUNIDAD
-            if (comentarios > (track.comentarios || 0)) {
-                resultado.razon = 'Salvado por Comentarios (Inmunidad)';
-                return resultado;
-            }
-            if (likes > (track.likes || 0)) {
-                resultado.razon = 'Salvado por Likes Nuevos';
-                return resultado;
-            }
-            resultado.accion = 'DELETE';
-            resultado.razon = 'Estancamiento Total (Día 14)';
-            return resultado;
+        // CRITERIO DE GRADUACIÓN (Playlist de Oro)
+        if (hypeScore > 50 || factorCrecimiento > 3 || comentarios > 5) {
+            resultado.nuevosDatos.fase = 'graduado';
+            resultado.razon = '🏆 GRADUADO (Superó las expectativas)';
         }
-    }
-
-    // --- 🚪 PUERTA 4: REPECHAJE (Día 28) ---
-    if (diasAntiguedad >= 28) {
-        // Caso A: GRADUADO (>100 plays o score muy alto)
-        if (plays_actuales > 100 || proyeccionHype > 100) { 
-             resultado.nuevosDatos.fase = 'graduado';
-             resultado.razon = '🎓 Graduado con Honor';
-        } 
-        // Caso B: REPECHAJE (Segunda oportunidad)
-        else if (track.fase !== 'repechaje') {
+        // CRITERIO DE HIBERNACIÓN (Repechaje)
+        else if (interacciones > 0) {
             resultado.nuevosDatos.fase = 'repechaje';
-            resultado.razon = '⏸️ Enviado a Repechaje';
+            resultado.razon = '🧟 Zombie/Repechaje (Tiene vida, pero lenta)';
         }
-        // Caso C: FIN DEL JUEGO (Día 56+)
-        else if (track.fase === 'repechaje' && diasAntiguedad > 56) {
+        // CRITERIO DE PURGA FINAL
+        else {
+            resultado.accion = 'DELETE';
+            resultado.razon = '🗑️ Purga Mensual (No cuajó en 21 días)';
+        }
+    }
+
+    // Si ya era zombie y sigue sin hacer nada a los 60 días
+    if (track.fase === 'repechaje' && diasAntiguedad > 60) {
+         if (likes < (track.likes || 0) + 5) { // Hard Goal: +5 likes en repechaje
              resultado.accion = 'DELETE';
-             resultado.razon = 'Fin del Repechaje (Fracaso definitivo)';
-        }
+             resultado.razon = '💀 Fin del Repechaje (No cumplió Hard Goal)';
+         }
     }
 
     return resultado;
 }
 
+// --- FUNCIÓN AUXILIAR: REINTENTO INTELIGENTE (Fase 3.5) ---
+async function fetchConReintento(url, titulo) {
+    let attempts = 0;
+    let match = null;
+
+    while (attempts <= MAX_RETRIES && !match) {
+        try {
+            if (attempts > 0) {
+                const delay = 2000 * attempts;
+                console.log(`⚠️ [RETRY ${attempts}/${MAX_RETRIES}] Esperando ${delay}ms para: "${titulo}"`);
+                await new Promise(res => setTimeout(res, delay));
+            }
+
+            const response = await fetch(url, {
+                headers: { 'User-Agent': MOBILE_UA },
+                timeout: 10000 // 10s timeout
+            });
+
+            if (response.status === 404 || response.status === 410) return '404'; // Código especial para borrados
+
+            const html = await response.text();
+            const regex = /<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s;
+            match = html.match(regex);
+
+            if (!match) attempts++; // Si no hay raíz, cuenta como fallo
+
+        } catch (err) {
+            attempts++;
+            console.error(`❌ Error Red (${attempts}/${MAX_RETRIES}) en "${titulo}": ${err.message}`);
+        }
+    }
+    return match;
+}
+
 // --- 4. MOTOR DE INSPECCIÓN ---
 async function procesarLote(tracks) {
     console.log(`⚡ Procesando lote de ${tracks.length} tracks...`);
-    
+
     await Promise.all(tracks.map(async (track) => {
         const mobileUrl = track.url.replace('https://soundcloud.com', 'https://m.soundcloud.com');
-        
+
         try {
-            // Fetch Móvil
-            const response = await fetch(mobileUrl, { headers: { 'User-Agent': MOBILE_UA } });
-            
-            if (response.status === 404 || response.status === 410) {
+            // Usamos el motor con reintento (Fase 3.5)
+            const match = await fetchConReintento(mobileUrl, track.titulo);
+
+            // Manejo de errores fatales
+            if (match === '404') {
                 console.log(`❌ URL Rota: ${track.titulo} -> DELETE (404)`);
                 if (!DRY_RUN) await supabase.from('tracks').delete().eq('id', track.id);
                 return;
             }
 
-            // Extracción
-            const html = await response.text();
-            const regex = /<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s;
-            const match = html.match(regex);
-            
-            if (!match) return; 
-            
+            if (!match) {
+                console.log(`💀 [ABANDONO] Datos vacíos para: "${track.titulo}" tras reintentos.`);
+                return; // Protegemos la BD: No guardamos ceros falsos
+            }
+
             const json = JSON.parse(match[1]);
             const entities = json.props?.pageProps?.initialStoreState?.entities?.tracks || {};
             const trackKey = Object.keys(entities).find(k => k.includes('soundcloud:tracks'));
@@ -160,7 +198,7 @@ async function procesarLote(tracks) {
 
             // Sentencia
             const logPrefix = DRY_RUN ? '🔍 [SIMULACRO]' : '🚀 [REAL]';
-            
+
             if (veredicto.accion === 'DELETE') {
                 console.log(`${logPrefix} 💀 ELIMINAR: "${track.titulo}" | Razón: ${veredicto.razon}`);
                 if (!DRY_RUN) await supabase.from('tracks').delete().eq('id', track.id);
@@ -178,15 +216,15 @@ async function procesarLote(tracks) {
 // --- 5. EJECUCIÓN PRINCIPAL ---
 async function run() {
     console.log(`💀 INICIANDO VERDUGO - DRY RUN: ${DRY_RUN}`);
-    
+
     // Traemos tracks que NO sean graduados.
     // Ordenamos por antigüedad para auditar primero los más viejos.
     const { data: tracks, error } = await supabase
         .from('tracks')
         .select('*')
-        .neq('fase', 'graduado') 
-        .order('fecha_ingreso', { ascending: true }) 
-        .limit(200); 
+        .neq('fase', 'graduado')
+        .order('fecha_ingreso', { ascending: true })
+        .limit(200);
 
     if (error) {
         console.error("Error BD:", error);
