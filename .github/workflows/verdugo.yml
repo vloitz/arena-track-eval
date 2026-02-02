@@ -9,8 +9,14 @@ on:
 jobs:
   limpieza:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
+      # --- NUEVO PASO CRÍTICO (Para cálculo dinámico de tiempo) ---
+      - name: ⏱️ Marcar Inicio del Reloj (Precisión Milimétrica)
+        run: echo "JOB_START_TIME=$(date +%s%3N)" >> $GITHUB_ENV
+      # -----------------------------------------------------------
+
       - name: Checkout código
         uses: actions/checkout@v4
 
