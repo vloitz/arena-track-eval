@@ -65,7 +65,7 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         likes,
         comentarios,
         reposts,
-        has_download // Ya viene extraído
+        has_download // Solo esto viene de statsActuales
     } = statsActuales;
 
     // 1. Cálculo de Score Actual
@@ -90,6 +90,7 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
             comentarios,
             reposts,
             has_download: has_download,
+            download_category: track.download_category, // Mantener la categoría que ya sembró el index.js
             hype_score: hypeScore,
             ultima_inspeccion: new Date().toISOString()
         }
