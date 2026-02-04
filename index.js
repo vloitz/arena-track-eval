@@ -338,63 +338,102 @@ async function run() {
         await humanScroll(page);
         await ghostClick(page);
 
-        const data = await page.evaluate((minDur, maxDur, eliteGenres) => {
-            // Recuperamos la colección capturada por el interceptor en la raíz
+        const reporteCosecha = await page.evaluate((minDur, maxDur, eliteGenres) => {
             const rawTracks = window.COLECCION_MAESTRA || [];
+            const resultados = {
+                aceptados: [],
+                ignorados: []
+            };
 
-            return rawTracks.filter(t => {
-                // 1. Filtro de Duración (3 a 8 min convertidos a ms)
+            rawTracks.forEach(t => {
+                const durMinutos = (t.duration / 60000).toFixed(2);
+                const textoADN = ((t.genre || '') + ' ' + (t.tag_list || '')).toLowerCase();
+
+                // 1. Validar Tiempo
                 const cumpleTiempo = t.duration >= minDur && t.duration <= maxDur;
+                // 2. Validar Género
+                const cumpleGenero = eliteGenres.some(g => textoADN.includes(g.toLowerCase()));
 
-                // 2. Filtro de ADN (Género + Tags)
-                // Usamos concatenación simple para evitar errores de sintaxis en el editor
-                const textoADN = (t.genre || '') + ' ' + (t.tag_list || '');
-                const cumpleGenero = eliteGenres.some(g => textoADN.toLowerCase().includes(g.toLowerCase()));
-
-                return cumpleTiempo && cumpleGenero;
-            }).map(t => {
-
-                // --- LÓGICA DE CATEGORIZACIÓN ÉLITE ---
-            const pTitle = (t.purchase_title || '').toLowerCase();
-            const pUrl = (t.purchase_url || '').toLowerCase();
-
-            let categoria = 'NONE';
-            if (t.downloadable) categoria = 'DIRECT';
-            else if (pUrl.includes('beatport') || pUrl.includes('traxsource') || pUrl.includes('bandcamp')) categoria = 'PURCHASE';
-            else if (pUrl.includes('hypeddit') || pUrl.includes('toneden') || pUrl.includes('theartistunion')) categoria = 'GATE';
-            else if (pUrl.includes('drive.google') || pUrl.includes('dropbox') || pUrl.includes('mega.nz')) categoria = 'CLOUD';
-            else if (pTitle.includes('free')) categoria = 'FREE_OTHER';
-
-                return {
+                const trackData = {
                     sc_id: t.id,
                     titulo: t.title,
-                    url: t.permalink_url,
-                    duracion_ms: t.duration,
-                    genero: t.genre,
-                    tags: t.tag_list,
-                    fecha_publicacion: t.created_at,
-                    has_download: categoria !== 'NONE',
-                    download_category: categoria,
-                    // --- 📸 SNAPSHOT INICIAL (Fase 3.5) ---
-                    plays_iniciales: t.playback_count,
-                    likes_iniciales: t.likes_count,
-                    comentarios_iniciales: t.comment_count,
-                    // --- DATOS ACTUALES ---
-                    plays_actuales: t.playback_count,
-                    likes: t.likes_count,
-                    comentarios: t.comment_count,
-                    reposts: t.reposts_count,
-                    ultima_inspeccion: new Date().toISOString()
+                    duracion: `${durMinutos}m`,
+                    genero: t.genre || 'N/A',
+                    tags: t.tag_list || ''
                 };
+
+                if (cumpleTiempo && cumpleGenero) {
+                    const pTitle = (t.purchase_title || '').toLowerCase();
+                    const pUrl = (t.purchase_url || '').toLowerCase();
+                    let categoria = 'NONE';
+                    if (t.downloadable) categoria = 'DIRECT';
+                    else if (pUrl.includes('beatport') || pUrl.includes('traxsource') || pUrl.includes('bandcamp')) categoria = 'PURCHASE';
+                    else if (pUrl.includes('hypeddit') || pUrl.includes('toneden') || pUrl.includes('theartistunion')) categoria = 'GATE';
+                    else if (pUrl.includes('drive.google') || pUrl.includes('dropbox') || pUrl.includes('mega.nz')) categoria = 'CLOUD';
+                    else if (pTitle.includes('free')) categoria = 'FREE_OTHER';
+
+                    resultados.aceptados.push({
+                        ...trackData,
+                        url: t.permalink_url,
+                        duracion_ms: t.duration,
+                        has_download: categoria !== 'NONE',
+                        download_category: categoria,
+                        plays_iniciales: t.playback_count,
+                        likes_iniciales: t.likes_count,
+                        comentarios_iniciales: t.comment_count,
+                        plays_actuales: t.playback_count,
+                        likes: t.likes_count,
+                        comentarios: t.comment_count,
+                        reposts: t.reposts_count,
+                        fecha_publicacion: t.created_at,
+                        ultima_inspeccion: new Date().toISOString()
+                    });
+                } else {
+                    let razon = !cumpleTiempo ? `Duración fuera de rango (${durMinutos}m)` : `Género/Tags no élite`;
+                    resultados.ignorados.push({
+                        ...trackData,
+                        razon
+                    });
+                }
             });
+            return resultados;
         }, DURACION_MIN, DURACION_MAX, GENEROS_ELITE);
 
-        console.log(`🌾 Recolectados: ${data.length} tracks.`);
+        const {
+            aceptados,
+            ignorados
+        } = reporteCosecha;
+
+        console.log(`\n📊 --- REPORTE DE INTELIGENCIA ---`);
+        console.log(`✅ ACEPTADOS PARA DB: ${aceptados.length}`);
+        console.log(`❌ IGNORADOS POR FILTRO: ${ignorados.length}`);
+        console.log(`📦 TOTAL PROCESADOS EN RED: ${aceptados.length + ignorados.length}`);
+
+        if (aceptados.length > 0) {
+            console.log("\n💎 MUESTRA DE TRACKS ÉLITE:");
+            console.table(aceptados.slice(0, 10).map(t => ({
+                Titulo: t.titulo.substring(0, 30),
+                Dur: t.duracion,
+                Cat: t.download_category
+            })));
+        }
+
+        if (ignorados.length > 0) {
+            console.log("\n🗑️ RAZONES DE DESCARTE (Muestra):");
+            console.table(ignorados.slice(0, 5).map(t => ({
+                Titulo: t.titulo.substring(0, 30),
+                Razon: t.razon
+            })));
+        }
+
+        const data = aceptados; // Sincronizamos con el resto del código
 
         if (data.length > 0) {
             // Realizamos el Upsert usando sc_id como identificador único real
             // Esto evita duplicados si el artista cambia el título/URL más adelante.
-            const { error } = await supabase
+            const {
+                error
+            } = await supabase
                 .from('tracks')
                 .upsert(data, {
                     onConflict: 'sc_id',
