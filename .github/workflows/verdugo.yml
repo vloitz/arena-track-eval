@@ -26,7 +26,7 @@ jobs:
           node-version: '20'
 
       - name: Instalar dependencias
-        run: npm install puppeteer @supabase/supabase-js node-fetch
+        run: npm install
 
       - name: Ejecutar El Verdugo
         env:
