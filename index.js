@@ -426,7 +426,8 @@ async function run() {
             })));
         }
 
-        const data = aceptados; // Sincronizamos con el resto del código
+        // Sincronizamos los datos filtrados quitando la columna visual 'duracion' que no existe en DB
+        const data = aceptados.map(({ duracion, ...dbData }) => dbData);
 
         if (data.length > 0) {
             // Realizamos el Upsert usando sc_id como identificador único real
