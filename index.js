@@ -1,16 +1,50 @@
 const puppeteer = require('puppeteer');
-const { createClient } = require('@supabase/supabase-js');
+const {
+    createClient
+} = require('@supabase/supabase-js');
 
 // 1. Configuración de Secretos
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// CONFIGURACIÓN DE PARALELISMO (NUEVO)
-const PARALLEL_POOL_SIZE = 5; // Ajustable: Número de tracks a inspeccionar a la vez
-
 // 2. Objetivo: House, publicado en la última hora
 const TARGET = 'https://soundcloud.com/search/sounds?q=house&filter.duration=medium&filter.created_at=last_hour';
+
+// --- CRITERIOS ÉLITE (DJ STYLE) ---
+const DURACION_MIN = 180000; // 3 minutos en ms
+const DURACION_MAX = 480000; // 8 minutos en ms
+const GENEROS_ELITE = [
+    'tech house', 'house', 'deep tech', 'afro house', 'deep house',
+    'dance & edm', 'funky house', 'jackin house', 'garage house',
+    'hard house', 'uk garage', 'bassline', 'trance', 'uk-garage-bassline'
+];
+
+// --- LA LLAVE MAESTRA: INTERCEPTOR XHR ---
+const INTERCEPTOR_SCRIPT = `
+(function() {
+    window.COLECCION_MAESTRA = [];
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function(m, url) { this._url = url; return originalOpen.apply(this, arguments); };
+    XMLHttpRequest.prototype.send = function() {
+        this.addEventListener('load', function() {
+            if (this._url.match(/\\/search|\\/tracks|\\/selections/)) {
+                try {
+                    const data = JSON.parse(this.responseText);
+                    const items = data.collection || data.tracks || [];
+                    items.forEach(item => {
+                        const t = item.track || item;
+                        if (t.kind === 'track' && !window.COLECCION_MAESTRA.some(m => m.id === t.id)) {
+                            window.COLECCION_MAESTRA.push(t);
+                        }
+                    });
+                } catch (e) {}
+            }
+        });
+        return originalSend.apply(this, arguments);
+    };
+})();`;
 
 // 3. Array de User-Agents Variables (Escritorio - Se mantiene para búsqueda)
 const USER_AGENTS = [
@@ -37,8 +71,8 @@ async function humanMouseWithShake(page) {
 
     for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const x = Math.pow(1-t, 3) * startX + 3 * Math.pow(1-t, 2) * t * cp1X + 3 * (1-t) * Math.pow(t, 2) * cp2X + Math.pow(t, 3) * endX;
-        const y = Math.pow(1-t, 3) * startY + 3 * Math.pow(1-t, 2) * t * cp1Y + 3 * (1-t) * Math.pow(t, 2) * cp2Y + Math.pow(t, 3) * endY;
+        const x = Math.pow(1 - t, 3) * startX + 3 * Math.pow(1 - t, 2) * t * cp1X + 3 * (1 - t) * Math.pow(t, 2) * cp2X + Math.pow(t, 3) * endX;
+        const y = Math.pow(1 - t, 3) * startY + 3 * Math.pow(1 - t, 2) * t * cp1Y + 3 * (1 - t) * Math.pow(t, 2) * cp2Y + Math.pow(t, 3) * endY;
 
         const shakeX = (Math.random() - 0.5) * 2;
         const shakeY = (Math.random() - 0.5) * 2;
@@ -51,10 +85,18 @@ async function humanMouseWithShake(page) {
 
 // 5. Click-Stream Fantasma
 async function ghostClick(page) {
-    const deadZones = [
-        { x: 50 + Math.random() * 100, y: 50 + Math.random() * 100 },
-        { x: 800 + Math.random() * 200, y: 100 + Math.random() * 150 },
-        { x: 300 + Math.random() * 200, y: 600 + Math.random() * 100 }
+    const deadZones = [{
+            x: 50 + Math.random() * 100,
+            y: 50 + Math.random() * 100
+        },
+        {
+            x: 800 + Math.random() * 200,
+            y: 100 + Math.random() * 150
+        },
+        {
+            x: 300 + Math.random() * 200,
+            y: 600 + Math.random() * 100
+        }
     ];
     const zone = deadZones[Math.floor(Math.random() * deadZones.length)];
     await page.mouse.move(zone.x, zone.y);
@@ -99,159 +141,26 @@ async function humanScroll(page) {
                     console.log("⚠️ Carga trabada. Aplicando sacudón arriba/abajo...");
                     hasReset = true;
 
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    window.scrollTo({
+                        top: 0,
+                        behavior: 'smooth'
+                    });
                     await sleep(500);
-                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                    window.scrollTo({
+                        top: document.body.scrollHeight,
+                        behavior: 'smooth'
+                    });
 
                     lastChangeTime = Date.now(); // Reiniciar cronómetro tras el sacudón
                 }
                 // 3. CIERRE FINAL
                 else if (timeSinceLastChange > NO_CHANGE_TIMEOUT) {
-                     resolve(currentCount);
-                     break;
+                    resolve(currentCount);
+                    break;
                 }
             }
         });
     });
-}
-
-// 7. Función de Inspección "Zero Latency" con POOL DE PARALELISMO
-async function inspeccionMetricas() {
-    console.log("\n⚡ === FASE DE INSPECCIÓN ZERO LATENCY (POOL DE PARALELISMO) ===");
-
-    // User-Agent obligatorio para inspección móvil
-    const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1';
-
-    try {
-        const { data: tracksToInspect, error: queryError } = await supabase
-            .from('tracks')
-            .select('url, titulo, fecha_ingreso')
-            .is('plays_iniciales', null)
-            .order('fecha_ingreso', { ascending: false })
-            .limit(300);
-
-        if (queryError) {
-            console.error("❌ Error al consultar tracks:", queryError);
-            return;
-        }
-
-        if (!tracksToInspect || tracksToInspect.length === 0) {
-            console.log("✅ No hay tracks pendientes de inspección.");
-            return;
-        }
-
-        console.log(`🚀 Acelerando al máximo para ${tracksToInspect.length} tracks (Lotes de ${PARALLEL_POOL_SIZE})...`);
-
-        // BUCLE CON POOL DE PARALELISMO
-        for (let i = 0; i < tracksToInspect.length; i += PARALLEL_POOL_SIZE) {
-            const chunk = tracksToInspect.slice(i, i + PARALLEL_POOL_SIZE);
-
-            // Procesar el lote en paralelo
-            await Promise.all(chunk.map(async (track, index) => {
-                const globalIndex = i + index + 1;
-                const { url, titulo } = track;
-
-                // Transformar URL a versión móvil
-                const mobileUrl = url.replace('https://soundcloud.com', 'https://m.soundcloud.com');
-                console.log(`[${globalIndex}/${tracksToInspect.length}] 🔥 ${mobileUrl}`);
-
-                try {
-                    // Fetch con User-Agent de iPhone
-                    const response = await fetch(mobileUrl, {
-                        headers: {
-                            'User-Agent': MOBILE_UA
-                        }
-                    });
-
-                    if (response.status === 404 || response.status === 410) {
-                        console.log(`❌ Roto (${response.status}) -> Eliminando.`);
-                        await supabase
-                            .from('tracks')
-                            .update({
-                                plays_iniciales: -1,
-                                ultima_inspeccion: new Date().toISOString()
-                            })
-                            .eq('url', url);
-                        return; // Salir de la función async para este track
-                    }
-
-                    if (!response.ok) {
-                        console.log(`⚠️ HTTP ${response.status}`);
-                        return;
-                    }
-
-                    const html = await response.text();
-
-                    // Extracción basada en __NEXT_DATA__
-                    const regex = /<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/s;
-                    const match = html.match(regex);
-
-                    if (!match) {
-                        console.log(`⚠️ Sin __NEXT_DATA__`);
-                        return;
-                    }
-
-                    const json = JSON.parse(match[1]);
-                    const entities = json.props?.pageProps?.initialStoreState?.entities?.tracks || {};
-
-                    // Búsqueda robusta de la llave
-                    const trackKey = Object.keys(entities).find(k => k.includes('soundcloud:tracks'));
-
-                    if (!trackKey) {
-                        console.log(`⚠️ Key no encontrada`);
-                        return;
-                    }
-
-                    const trackData = entities[trackKey].data;
-
-                    if (!trackData) {
-                        console.log(`⚠️ Data vacía`);
-                        return;
-                    }
-
-                    const extractedData = {
-                        sc_id: trackData.id,
-
-                        // --- 📸 SNAPSHOT FASE 3.5 (MEMORIA INICIAL) ---
-                        plays_iniciales: trackData.playback_count,
-                        likes_iniciales: trackData.likes_count,          // <--- NUEVO
-                        comentarios_iniciales: trackData.comment_count,  // <--- NUEVO
-
-                        // Datos Actuales
-                        plays_actuales: trackData.playback_count,
-                        likes: trackData.likes_count,
-                        comentarios: trackData.comment_count,
-                        reposts: trackData.reposts_count,
-
-                        fecha_publicacion: trackData.created_at,
-                        ultima_inspeccion: new Date().toISOString()
-                    };
-
-                    const { error: updateError } = await supabase
-                        .from('tracks')
-                        .update(extractedData)
-                        .eq('url', url);
-
-                    if (updateError) {
-                        console.error(`❌ DB Error`, updateError);
-                    } else {
-                        // Log simplificado
-                        // Log Fase 3.5: Confirmación de Memoria
-                        console.log(`✅ OK: ${extractedData.sc_id} | Init(P:${extractedData.plays_iniciales}/L:${extractedData.likes_iniciales}/C:${extractedData.comentarios_iniciales})`);
-                    }
-
-                } catch (error) {
-                    console.error(`❌ Error en track ${globalIndex}:`, error.message);
-                }
-            }));
-            // Fin del Promise.all para este lote, el bucle pasa al siguiente inmediatamente
-        }
-
-        console.log("\n✅ Inspección 'Zero Latency + Parallel Pool' completada.");
-
-    } catch (error) {
-        console.error("❌ Error General en Inspección:", error);
-    }
 }
 
 
@@ -259,9 +168,9 @@ async function inspeccionMetricas() {
 async function run() {
     // 1. OBTENCIÓN DEL TIEMPO REAL (Safety Layer)
     // Leemos la marca de tiempo del YAML para saber cuánto tardó el Setup
-    const jobStartTime = process.env.JOB_START_TIME
-        ? parseInt(process.env.JOB_START_TIME)
-        : Date.now();
+    const jobStartTime = process.env.JOB_START_TIME ?
+        parseInt(process.env.JOB_START_TIME) :
+        Date.now();
 
     // Límite duro de GitHub (15m) - 30s de Buffer para cierre limpio
     const DEADLINE = jobStartTime + (15 * 60 * 1000) - 30000;
@@ -288,18 +197,94 @@ async function run() {
 
     // Evasión de Huella Digital
     await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => false
+        });
         window.chrome = {
-            app: { isInstalled: false, InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' }, RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' } },
-            runtime: { OnInstalledReason: { CHROME_UPDATE: 'chrome_update', INSTALL: 'install', SHARED_MODULE_UPDATE: 'shared_module_update', UPDATE: 'update' }, OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' }, PlatformArch: { ARM: 'arm', ARM64: 'arm64', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86-32', X86_64: 'x86-64' }, PlatformNacos: { ANDROID: 'android', CROS: 'cros', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' }, PlatformOs: { ANDROID: 'android', CROS: 'cros', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' }, RequestUpdateCheckStatus: { NO_UPDATE: 'no_update', THROTTLED: 'throttled', UPDATE_AVAILABLE: 'update_available' } }
+            app: {
+                isInstalled: false,
+                InstallState: {
+                    DISABLED: 'disabled',
+                    INSTALLED: 'installed',
+                    NOT_INSTALLED: 'not_installed'
+                },
+                RunningState: {
+                    CANNOT_RUN: 'cannot_run',
+                    READY_TO_RUN: 'ready_to_run',
+                    RUNNING: 'running'
+                }
+            },
+            runtime: {
+                OnInstalledReason: {
+                    CHROME_UPDATE: 'chrome_update',
+                    INSTALL: 'install',
+                    SHARED_MODULE_UPDATE: 'shared_module_update',
+                    UPDATE: 'update'
+                },
+                OnRestartRequiredReason: {
+                    APP_UPDATE: 'app_update',
+                    OS_UPDATE: 'os_update',
+                    PERIODIC: 'periodic'
+                },
+                PlatformArch: {
+                    ARM: 'arm',
+                    ARM64: 'arm64',
+                    MIPS: 'mips',
+                    MIPS64: 'mips64',
+                    X86_32: 'x86-32',
+                    X86_64: 'x86-64'
+                },
+                PlatformNacos: {
+                    ANDROID: 'android',
+                    CROS: 'cros',
+                    LINUX: 'linux',
+                    MAC: 'mac',
+                    OPENBSD: 'openbsd',
+                    WIN: 'win'
+                },
+                PlatformOs: {
+                    ANDROID: 'android',
+                    CROS: 'cros',
+                    LINUX: 'linux',
+                    MAC: 'mac',
+                    OPENBSD: 'openbsd',
+                    WIN: 'win'
+                },
+                RequestUpdateCheckStatus: {
+                    NO_UPDATE: 'no_update',
+                    THROTTLED: 'throttled',
+                    UPDATE_AVAILABLE: 'update_available'
+                }
+            }
         };
         const cores = [4, 8, 16][Math.floor(Math.random() * 3)];
-        Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => cores });
-        Object.defineProperty(navigator, 'plugins', { get: () => [{ name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }, { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' }, { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }] });
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en', 'es'] });
+        Object.defineProperty(navigator, 'hardwareConcurrency', {
+            get: () => cores
+        });
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [{
+                name: 'Chrome PDF Plugin',
+                filename: 'internal-pdf-viewer',
+                description: 'Portable Document Format'
+            }, {
+                name: 'Chrome PDF Viewer',
+                filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
+                description: ''
+            }, {
+                name: 'Native Client',
+                filename: 'internal-nacl-plugin',
+                description: ''
+            }]
+        });
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en', 'es']
+        });
     });
 
     await page.setUserAgent(randomUA);
+
+    // Inyectar el interceptor antes de cargar la web
+    await page.evaluateOnNewDocument(INTERCEPTOR_SCRIPT);
 
     await page.setRequestInterception(true);
     page.on('request', (req) => {
@@ -312,7 +297,9 @@ async function run() {
         if (Date.now() > DEADLINE) throw new Error("Tiempo agotado antes de navegar");
 
         console.log("🌍 Viajando a SoundCloud...");
-        await page.goto(TARGET, { waitUntil: 'domcontentloaded' });
+        await page.goto(TARGET, {
+            waitUntil: 'domcontentloaded'
+        });
 
         // --- 🛡️ BLINDAJE TOTAL ---
         await page.evaluate(() => {
@@ -351,25 +338,76 @@ async function run() {
         await humanScroll(page);
         await ghostClick(page);
 
-        const data = await page.evaluate(() => {
-            const items = document.querySelectorAll('.searchList__item a.soundTitle__title');
-            return Array.from(items).map(a => ({
-                url: 'https://soundcloud.com' + a.getAttribute('href'),
-                titulo: a.innerText.trim()
-            }));
-        });
+        const data = await page.evaluate((minDur, maxDur, eliteGenres) => {
+            // Recuperamos la colección capturada por el interceptor en la raíz
+            const rawTracks = window.COLECCION_MAESTRA || [];
+
+            return rawTracks.filter(t => {
+                // 1. Filtro de Duración (3 a 8 min convertidos a ms)
+                const cumpleTiempo = t.duration >= minDur && t.duration <= maxDur;
+
+                // 2. Filtro de ADN (Género + Tags)
+                // Usamos concatenación simple para evitar errores de sintaxis en el editor
+                const textoADN = (t.genre || '') + ' ' + (t.tag_list || '');
+                const cumpleGenero = eliteGenres.some(g => textoADN.toLowerCase().includes(g.toLowerCase()));
+
+                return cumpleTiempo && cumpleGenero;
+            }).map(t => {
+
+                // --- LÓGICA DE CATEGORIZACIÓN ÉLITE ---
+            const pTitle = (t.purchase_title || '').toLowerCase();
+            const pUrl = (t.purchase_url || '').toLowerCase();
+
+            let categoria = 'NONE';
+            if (t.downloadable) categoria = 'DIRECT';
+            else if (pUrl.includes('beatport') || pUrl.includes('traxsource') || pUrl.includes('bandcamp')) categoria = 'PURCHASE';
+            else if (pUrl.includes('hypeddit') || pUrl.includes('toneden') || pUrl.includes('theartistunion')) categoria = 'GATE';
+            else if (pUrl.includes('drive.google') || pUrl.includes('dropbox') || pUrl.includes('mega.nz')) categoria = 'CLOUD';
+            else if (pTitle.includes('free')) categoria = 'FREE_OTHER';
+
+                return {
+                    sc_id: t.id,
+                    titulo: t.title,
+                    url: t.permalink_url,
+                    duracion_ms: t.duration,
+                    genero: t.genre,
+                    tags: t.tag_list,
+                    fecha_publicacion: t.created_at,
+                    has_download: categoria !== 'NONE',
+                    download_category: categoria,
+                    // --- 📸 SNAPSHOT INICIAL (Fase 3.5) ---
+                    plays_iniciales: t.playback_count,
+                    likes_iniciales: t.likes_count,
+                    comentarios_iniciales: t.comment_count,
+                    // --- DATOS ACTUALES ---
+                    plays_actuales: t.playback_count,
+                    likes: t.likes_count,
+                    comentarios: t.comment_count,
+                    reposts: t.reposts_count,
+                    ultima_inspeccion: new Date().toISOString()
+                };
+            });
+        }, DURACION_MIN, DURACION_MAX, GENEROS_ELITE);
 
         console.log(`🌾 Recolectados: ${data.length} tracks.`);
 
         if (data.length > 0) {
+            // Realizamos el Upsert usando sc_id como identificador único real
+            // Esto evita duplicados si el artista cambia el título/URL más adelante.
             const { error } = await supabase
                 .from('tracks')
-                .upsert(data.map(d => ({ url: d.url, titulo: d.titulo })), { onConflict: 'url', ignoreDuplicates: true });
+                .upsert(data, {
+                    onConflict: 'sc_id',
+                    ignoreDuplicates: true
+                });
 
-            if (error) console.error("❌ Error DB Upsert:", error);
-            else console.log("✅ URLs nuevas sembradas en la nube.");
+            if (error) {
+                console.error("❌ Error DB Upsert:", error);
+            } else {
+                console.log(`✅ ${data.length} tracks con DATA COMPLETA sembrados en la nube.`);
+            }
         } else {
-            console.log("⚠️ No se encontró música nueva en esta hora.");
+            console.log("⚠️ No se encontró música nueva que cumpla tus criterios Élite en esta tanda.");
         }
 
         await ghostClick(page);
@@ -384,7 +422,6 @@ async function run() {
     // CHECK DE SEGURIDAD 2: ¿Nos queda tiempo para inspeccionar métricas?
     if (Date.now() < DEADLINE) {
         console.log("⚡ Iniciando fase de procesamiento de datos...");
-        await inspeccionMetricas();
     } else {
         console.log("🛑 Tiempo agotado. Saltando inspección de métricas por seguridad.");
     }
