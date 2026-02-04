@@ -25,8 +25,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: 🚀 Instalar Dependencias (Modo CI)
-        run: npm ci
+      - name: 🚀 Instalar Dependencias
+        run: npm install
 
       - name: 🤖 Ejecutar Recolector Humano Elite
         env:
