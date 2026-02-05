@@ -408,12 +408,24 @@ async function run() {
                 if (!esBasura && cumpleTiempo && cumpleGenero) {
                     const pTitle = (t.purchase_title || '').toLowerCase();
                     const pUrl = (t.purchase_url || '').toLowerCase();
+
+                    // --- 🏷️ CATEGORIZACIÓN POR TRANSPARENCIA ---
                     let categoria = 'NONE';
-                    if (t.downloadable) categoria = 'DIRECT';
-                    else if (pUrl.includes('beatport') || pUrl.includes('traxsource') || pUrl.includes('bandcamp')) categoria = 'PURCHASE';
-                    else if (pUrl.includes('hypeddit') || pUrl.includes('toneden') || pUrl.includes('theartistunion')) categoria = 'GATE';
-                    else if (pUrl.includes('drive.google') || pUrl.includes('dropbox') || pUrl.includes('mega.nz')) categoria = 'CLOUD';
-                    else if (pTitle.includes('free')) categoria = 'FREE_OTHER';
+                    const esTiendaPro = pUrl.includes('beatport') || pUrl.includes('traxsource') || pUrl.includes('bandcamp');
+                    // Unificación: Drive, Dropbox, Mega y Mediafire se consideran descarga directa para el DJ
+                    const esNubeDirecta = pUrl.includes('drive.google') || pUrl.includes('dropbox') || pUrl.includes('mega.nz') || pUrl.includes('mediafire.com');
+
+                    if (esTiendaPro) {
+                        // Si está en tiendas, es categoría profesional/compra (evitamos el engaño)
+                        categoria = 'PURCHASE';
+                    } else if (t.downloadable || esNubeDirecta) {
+                        // Si no es de tienda pero tiene botón de SoundCloud o link de nube directa
+                        categoria = 'DIRECT';
+                    } else if (pUrl.includes('hypeddit') || pUrl.includes('toneden') || pUrl.includes('theartistunion')) {
+                        categoria = 'GATE';
+                    } else if (pTitle.includes('free')) {
+                        categoria = 'FREE_OTHER';
+                    }
 
                     resultados.aceptados.push({
                         ...trackData,
