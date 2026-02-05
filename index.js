@@ -454,7 +454,7 @@ async function run() {
 
         if (aceptados.length > 0) {
             console.log("\n💎 MUESTRA DE TRACKS ÉLITE:");
-            console.table(aceptados.map(t => ({
+            console.table(aceptados.slice(0, 10).map(t => ({
                 Titulo: t.titulo.substring(0, 30),
                 Dur: t.duracion,
                 Cat: t.download_category
@@ -463,7 +463,7 @@ async function run() {
 
         if (ignorados.length > 0) {
             console.log("\n🗑️ RAZONES DE DESCARTE (Muestra):");
-            console.table(ignorados.slice(0, 5).map(t => ({
+            console.table(ignorados.map(t => ({
                 Titulo: t.titulo.substring(0, 30),
                 Razon: t.razon
             })));
