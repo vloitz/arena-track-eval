@@ -432,7 +432,7 @@ async function run() {
                         ultima_inspeccion: new Date().toISOString()
                     });
                 } else {
-                    let razon = esBasura ? `🚫 BLACKLIST: Contiene '${generoPrincipal}' o palabras prohibidas` : (!cumpleTiempo ? `Duración fuera de rango (${durMinutos}m)` : `Género/Tags no élite`);
+                    let razon = esBasura ? `🚫 BLACKLIST: ADN Prohibido detectado en track de género '${generoPrincipal}'` : (!cumpleTiempo ? `Duración fuera de rango (${durMinutos}m)` : `Género/Tags no élite`);
                     resultados.ignorados.push({
                         ...trackData,
                         razon
