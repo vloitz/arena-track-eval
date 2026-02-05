@@ -454,7 +454,7 @@ async function run() {
 
         if (aceptados.length > 0) {
             console.log("\n💎 MUESTRA DE TRACKS ÉLITE:");
-            console.table(aceptados.slice(0, 10).map(t => ({
+            console.table(aceptados.map(t => ({
                 Titulo: t.titulo.substring(0, 30),
                 Dur: t.duracion,
                 Cat: t.download_category
