@@ -48,12 +48,14 @@ const UMBRALES = {
     E3_RATIO_MIN: 5.0, // % mínimo de (Likes/Plays) para salvar Joyas de Culto
 };
 
-// --- 2. CÁLCULOS MATEMÁTICOS ---
-function calcularHype(plays, likes, reposts, comments, downloads, dias) {
+// --- 2. CÁLCULOS MATEMÁTICOS (Versión Unificada) ---
+function calcularHype(plays, likes, reposts, comments, hasDownload, dias) {
     if (dias < 1) dias = 1;
 
-    const factorDiamante = downloads ? 1 : 0;
-    const rawScore = (plays * POINTS.PLAY) + (likes * POINTS.LIKE) + (reposts * POINTS.REPOST) + (comments * POINTS.COMMENT) + (factorDiamante * POINTS.DOWNLOAD);
+    // Si tiene descarga (sea cual sea), suma el puntaje diamante fijo de 70
+    const puntosDescarga = hasDownload ? POINTS.DOWNLOAD : 0;
+
+    const rawScore = (plays * POINTS.PLAY) + (likes * POINTS.LIKE) + (reposts * POINTS.REPOST) + (comments * POINTS.COMMENT) + puntosDescarga;
 
     return rawScore / dias; // Velocidad de puntos por día
 }
@@ -71,6 +73,13 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
     // 1. Cálculo de Score Actual
     const interacciones = likes + comentarios + reposts;
     const hypeScore = calcularHype(plays_actuales, likes, reposts, comentarios, has_download, diasAntiguedad);
+
+    // 1.5 Cálculo de Proyecciones (El Oráculo)
+    // Calculamos cuánto ha ganado desde que entró a la DB y lo proyectamos a 30 días
+    const deltaVistasTotal = plays_actuales - (track.plays_iniciales || 0);
+    const vistasPorDia = deltaVistasTotal / (diasAntiguedad || 1);
+    const proyeccionVistas30d = plays_actuales + (vistasPorDia * 30);
+    const proyeccionHype30d = hypeScore * 30; // Estimación de tracción mensual
 
     // 2. Factor Exponencial
     let factorCrecimiento = 1;
@@ -90,8 +99,10 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
             comentarios,
             reposts,
             has_download: has_download,
-            download_category: track.download_category, // Mantener la categoría que ya sembró el index.js
+            download_category: track.download_category,
             hype_score: hypeScore,
+            proyeccion_vistas_30d: Math.round(proyeccionVistas30d), // Guardar número entero
+            proyeccion_hype_30d: parseFloat(proyeccionHype30d.toFixed(2)), // Guardar con 2 decimales
             ultima_inspeccion: new Date().toISOString()
         }
     };
