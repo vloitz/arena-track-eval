@@ -20,6 +20,11 @@ const GENEROS_ELITE = [
     'jackin house', 'groove house', 'garage house', 'hard house',
     'uk garage', 'bassline', 'hardgroove', 'indie dance'
 ];
+// --- 🚫 FILTRO DE EXCLUSIÓN (Basura Detectada) ---
+const BLACKLIST_ELITE = [
+    'techno', 'electronic', 'rock', 'cute', 'pop', 'slap',
+    'progressive', 'tropical', 'kpop', 'radio edit', 'bootleg'
+];
 
 // --- LA LLAVE MAESTRA: INTERCEPTOR XHR ---
 const INTERCEPTOR_SCRIPT = `
@@ -339,7 +344,7 @@ async function run() {
         await humanScroll(page);
         await ghostClick(page);
 
-        const reporteCosecha = await page.evaluate((minDur, maxDur, eliteGenres) => {
+        const reporteCosecha = await page.evaluate((minDur, maxDur, eliteGenres, blacklist) => {
             const rawTracks = window.COLECCION_MAESTRA || [];
             const resultados = {
                 aceptados: [],
@@ -353,6 +358,35 @@ async function run() {
                 // 1. Limpieza de ADN (Quitamos TODO lo que no sea letra o número para comparar)
                 const adnOriginal = ((t.genre || '') + ' ' + (t.tag_list || '')).toLowerCase();
                 const adnLimpio = adnOriginal.replace(/[^a-z0-9]/g, '');
+
+
+                // --- 🛡️ ESCUDO DE DOBLE NIVEL (Lógica de Aduana Diferenciada) ---
+                // Separamos el Género Principal de los Tags para aplicar justicia selectiva.
+                const generoPrincipal = (t.genre || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const tagsLimpios = (t.tag_list || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                // NIVEL A: BLOQUEO RADICAL POR GÉNERO (El "Pasaporte")
+                // Si el artista declara oficialmente que su género es uno de la blacklist, el rechazo es total.
+                // Aquí 'electronic', 'techno' o 'rock' son veneno mortal si aparecen como género principal.
+                const generoEsBasura = blacklist.some(word => {
+                    const wordLimpia = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return generoPrincipal === wordLimpia;
+                });
+
+                // NIVEL B: BLOQUEO DE TAGS CON "PERDÓN" (El "Equipaje")
+                // Filtramos la basura en las etiquetas, pero extraemos 'electronic' de la lista de prohibidos.
+                // Esto permite que un track de 'House' o 'EDM' que use el tag 'electronic' para ganar visibilidad pase el filtro.
+                const tagsTienenBasura = blacklist
+                    .filter(word => word.toLowerCase() !== 'electronic') // Perdonamos 'electronic' solo en los tags
+                    .some(word => {
+                        const wordLimpia = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+                        return tagsLimpios.includes(wordLimpia);
+                    });
+
+                // SENTENCIA FINAL: El track es basura si el género declarado es prohibido
+                // O si los tags contienen cualquier otra palabra prohibida que NO sea 'electronic'.
+                const esBasura = generoEsBasura || tagsTienenBasura;
+
 
                 // 2. Validar Tiempo
                 const cumpleTiempo = t.duration >= minDur && t.duration <= maxDur;
@@ -371,7 +405,7 @@ async function run() {
                     tags: t.tag_list || ''
                 };
 
-                if (cumpleTiempo && cumpleGenero) {
+                if (!esBasura && cumpleTiempo && cumpleGenero) {
                     const pTitle = (t.purchase_title || '').toLowerCase();
                     const pUrl = (t.purchase_url || '').toLowerCase();
                     let categoria = 'NONE';
@@ -398,7 +432,7 @@ async function run() {
                         ultima_inspeccion: new Date().toISOString()
                     });
                 } else {
-                    let razon = !cumpleTiempo ? `Duración fuera de rango (${durMinutos}m)` : `Género/Tags no élite`;
+                    let razon = esBasura ? `🚫 BLACKLIST: Contiene '${generoPrincipal}' o palabras prohibidas` : (!cumpleTiempo ? `Duración fuera de rango (${durMinutos}m)` : `Género/Tags no élite`);
                     resultados.ignorados.push({
                         ...trackData,
                         razon
@@ -406,7 +440,7 @@ async function run() {
                 }
             });
             return resultados;
-        }, DURACION_MIN, DURACION_MAX, GENEROS_ELITE);
+        }, DURACION_MIN, DURACION_MAX, GENEROS_ELITE, BLACKLIST_ELITE);
 
         const {
             aceptados,
