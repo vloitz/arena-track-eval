@@ -15,9 +15,10 @@ const TARGET = 'https://soundcloud.com/search/sounds?q=house&filter.duration=med
 const DURACION_MIN = 180000; // 3 minutos en ms
 const DURACION_MAX = 480000; // 8 minutos en ms
 const GENEROS_ELITE = [
-    'tech house', 'house', 'deep tech', 'afro house', 'deep house',
-    'dance & edm', 'funky house', 'jackin house', 'garage house',
-    'hard house', 'uk garage', 'bassline', 'trance', 'uk-garage-bassline'
+    'tech house', 'house', 'deep tech', 'minimal house', 'microhouse',
+    'afro house', 'deep house', 'dance edm', 'funky house',
+    'jackin house', 'groove house', 'garage house', 'hard house',
+    'uk garage', 'bassline', 'hardgroove', 'indie dance'
 ];
 
 // --- LA LLAVE MAESTRA: INTERCEPTOR XHR ---
@@ -347,12 +348,20 @@ async function run() {
 
             rawTracks.forEach(t => {
                 const durMinutos = (t.duration / 60000).toFixed(2);
-                const textoADN = ((t.genre || '') + ' ' + (t.tag_list || '')).toLowerCase();
 
-                // 1. Validar Tiempo
+
+                // 1. Limpieza de ADN (Quitamos TODO lo que no sea letra o número para comparar)
+                const adnOriginal = ((t.genre || '') + ' ' + (t.tag_list || '')).toLowerCase();
+                const adnLimpio = adnOriginal.replace(/[^a-z0-9]/g, '');
+
+                // 2. Validar Tiempo
                 const cumpleTiempo = t.duration >= minDur && t.duration <= maxDur;
-                // 2. Validar Género
-                const cumpleGenero = eliteGenres.some(g => textoADN.includes(g.toLowerCase()));
+
+                // 3. Validar Género (ADN) con Normalización Nuclear
+                const cumpleGenero = eliteGenres.some(g => {
+                    const generoBuscadoLimpio = g.toLowerCase().replace(/[^a-z0-9]/g, '');
+                    return adnLimpio.includes(generoBuscadoLimpio);
+                });
 
                 const trackData = {
                     sc_id: t.id,
