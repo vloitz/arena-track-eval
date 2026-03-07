@@ -163,7 +163,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
             resultado.razon = `📈 SALVADO: Tracción Detectada (+${deltaPlays} Vistas nuevas)`;
         } else {
             // Si no cumple nada -> MUERTE
-            resultado.accion = 'DELETE';
+            resultado.accion = 'UPDATE';
+            resultado.nuevosDatos.fase = 'descartado';
             resultado.razon = `💀 ELIMINADO: Ruido Blanco (0 Reacción, +${deltaPlays} Vistas insuficientes)`;
             return resultado;
         }
@@ -191,7 +192,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
 
         // A. Auditoría de Calidad Humana (Cierre de Tolerancia)
         if (likes === 0 && comentarios === 0 && !has_download) {
-            resultado.accion = 'DELETE';
+            resultado.accion = 'UPDATE';
+            resultado.nuevosDatos.fase = 'descartado';
             resultado.razon = '💀 Auditoría Fallida: 7 días sin validación humana (La apuesta de tracción falló)';
             return resultado;
         }
@@ -250,7 +252,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
 
             // C. PURGA (El Fin)
             else {
-                resultado.accion = 'DELETE';
+                resultado.accion = 'UPDATE';
+                resultado.nuevosDatos.fase = 'descartado';
                 resultado.razon = `🗑️ Purga: Ni éxito ni calidad de culto en 21 días (Ratio: ${ratioCalidad.toFixed(1)}%)`;
                 return resultado;
             }
@@ -272,7 +275,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         const comentsNuevosTemp2 = comentarios - (track.comentarios || 0);
 
         if (likesNuevosTemp2 === 0 && comentsNuevosTemp2 === 0 && !has_download) {
-            resultado.accion = 'DELETE';
+            resultado.accion = 'UPDATE';
+            resultado.nuevosDatos.fase = 'descartado';
             resultado.razon = '💀 Estación 4: Sin señales de vida en la primera mitad del repechaje';
             return resultado;
         }
@@ -301,7 +305,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
             resultado.nuevosDatos.fase = 'graduado';
             resultado.razon = cumpleRatio ? `🎓 GRADUADO TARDÍO: Joya de Culto (Ratio: ${ratioCalidad.toFixed(1)}%)` : `🎓 GRADUADO TARDÍO: Crecimiento por Volumen (+${likesNuevosFinal} likes)`;
         } else {
-            resultado.accion = 'DELETE';
+            resultado.accion = 'UPDATE';
+            resultado.nuevosDatos.fase = 'descartado';
             resultado.razon = `💀 Purga Final: No alcanzó los estándares del torneo (Volumen: +${likesNuevosFinal}, Ratio: ${ratioCalidad.toFixed(1)}%)`;
         }
     }
@@ -457,6 +462,7 @@ async function run() {
             .from('tracks')
             .select('*')
             .neq('fase', 'graduado')
+            .neq('fase', 'descartado')
             .lt('ultima_inspeccion', hace4Horas)
             .order('fecha_ingreso', {
                 ascending: true
