@@ -306,8 +306,10 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         }
     }
 
+    return resultado; // <--- ESTA ES LA LÍNEA CLAVE QUE DEBES AÑADIR
 
 }
+
 
 // --- FUNCIÓN AUXILIAR: REINTENTO INTELIGENTE ---
 async function fetchConReintento(url, titulo) {
