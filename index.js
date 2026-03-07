@@ -397,6 +397,12 @@ async function run() {
                     return adnLimpio.includes(generoBuscadoLimpio);
                 });
 
+                // 4. NUEVO: Validar Juventud (Máximo 3 meses / 90 días)
+                const fechaPublicacion = new Date(t.created_at);
+                const hoy = new Date();
+                const diasAntiguedad = Math.floor((hoy - fechaPublicacion) / (1000 * 60 * 60 * 24));
+                const esReciente = diasAntiguedad <= 90;
+
                 const trackData = {
                     sc_id: t.id,
                     titulo: t.title,
@@ -405,7 +411,9 @@ async function run() {
                     tags: t.tag_list || ''
                 };
 
-                if (!esBasura && cumpleTiempo && cumpleGenero) {
+
+
+                if (!esBasura && cumpleTiempo && cumpleGenero && esReciente) {
                     const pTitle = (t.purchase_title || '').toLowerCase();
                     const pUrl = (t.purchase_url || '').toLowerCase();
 
@@ -444,7 +452,17 @@ async function run() {
                         ultima_inspeccion: new Date().toISOString()
                     });
                 } else {
-                    let razon = esBasura ? `🚫 BLACKLIST: ADN Prohibido detectado en track de género '${generoPrincipal}'` : (!cumpleTiempo ? `Duración fuera de rango (${durMinutos}m)` : `Género/Tags no élite`);
+                    let razon = '';
+                    if (esBasura) {
+                        razon = `🚫 BLACKLIST: ADN Prohibido en '${generoPrincipal}'`;
+                    } else if (!cumpleTiempo) {
+                        razon = `Duración fuera de rango (${durMinutos}m)`;
+                    } else if (!esReciente) {
+                        razon = `Demasiado viejo (${diasAntiguedad} días)`;
+                    } else {
+                        razon = `Género/Tags no élite`;
+                    }
+
                     resultados.ignorados.push({
                         ...trackData,
                         razon
@@ -482,7 +500,10 @@ async function run() {
         }
 
         // Sincronizamos los datos filtrados quitando la columna visual 'duracion' que no existe en DB
-        const data = aceptados.map(({ duracion, ...dbData }) => dbData);
+        const data = aceptados.map(({
+            duracion,
+            ...dbData
+        }) => dbData);
 
         if (data.length > 0) {
             // Realizamos el Upsert usando sc_id como identificador único real
