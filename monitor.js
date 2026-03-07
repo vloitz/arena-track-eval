@@ -21,11 +21,11 @@ const MOBILE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleW
 
 // NUEVA PONDERACIÓN FASE 3.5 (Enfoque Humano)
 const POINTS = {
-    PLAY: 0.01,   // Ruido (casi nulo)
-    LIKE: 30,     // Plata
-    REPOST: 10,   // Bronce
-    COMMENT: 60,  // Oro Puro
-    DOWNLOAD: 70  // Diamante (Intención de uso real)
+    PLAY: 0.01, // Ruido (casi nulo)
+    LIKE: 30, // Plata
+    REPOST: 10, // Bronce
+    COMMENT: 60, // Oro Puro
+    DOWNLOAD: 70 // Diamante (Intención de uso real)
 };
 
 // CONFIGURACIÓN DE UMBRALES (El Juez)
@@ -103,7 +103,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
             hype_score: hypeScore,
             proyeccion_vistas_30d: Math.round(proyeccionVistas30d), // Guardar número entero
             proyeccion_hype_30d: parseFloat(proyeccionHype30d.toFixed(2)), // Guardar con 2 decimales
-            ultima_inspeccion: new Date().toISOString()
+            ultima_inspeccion: new Date().toISOString(),
+            monitor_exitos: (track.monitor_exitos || 0) + 1 // <--- TELEMETRÍA DE ÉXITO
         }
     };
 
@@ -190,9 +191,9 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
 
         // A. Auditoría de Calidad Humana (Cierre de Tolerancia)
         if (likes === 0 && comentarios === 0 && !has_download) {
-             resultado.accion = 'DELETE';
-             resultado.razon = '💀 Auditoría Fallida: 7 días sin validación humana (La apuesta de tracción falló)';
-             return resultado;
+            resultado.accion = 'DELETE';
+            resultado.razon = '💀 Auditoría Fallida: 7 días sin validación humana (La apuesta de tracción falló)';
+            return resultado;
         }
 
         // B. Chequeo de Movimiento (Inercia)
@@ -202,12 +203,12 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         }
         // C. Reconocimiento de Éxito
         else if (factorCrecimiento >= 2) {
-             resultado.razon = `🚀 Impulso mantenido: ${mensajeCrecimiento}`;
+            resultado.razon = `🚀 Impulso mantenido: ${mensajeCrecimiento}`;
         }
     }
 
 
-// =================================================================================================
+    // =================================================================================================
     // 🚉 ESTACIÓN 3: EL JUICIO FINAL (Día 21+) - FIN DE TEMPORADA 1
     // =================================================================================================
     // OBJETIVO: Selección de Élite. Decidir quién entra a la maleta y quién merece una última chance.
@@ -256,7 +257,7 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         }
     }
 
-// =================================================================================================
+    // =================================================================================================
     // 🚉 ESTACIÓN 4: AUDITORÍA DE ESTABILIDAD (Día 40 - 45) - MITAD DE TEMPORADA 2
     // =================================================================================================
     // OBJETIVO: Limpiar el repechaje. No dejar que tracks estancados ocupen espacio hasta el día 60.
@@ -277,7 +278,7 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         }
     }
 
-// =================================================================================================
+    // =================================================================================================
     // 🏁 ESTACIÓN 5: EL JUICIO FINAL DEL TORNEO (Día 60+) - FIN DE TEMPORADA 2
     // =================================================================================================
     // OBJETIVO: Graduación Definitiva o Purga Total. El límite final de estancia en la base de datos.
@@ -321,8 +322,14 @@ async function fetchConReintento(url, titulo) {
                 await new Promise(res => setTimeout(res, delay));
             }
 
+            // --- DISFRAZ HUMANO PARA EVITAR BLOQUEO IP ---
             const response = await fetch(url, {
-                headers: { 'User-Agent': MOBILE_UA },
+                headers: {
+                    'User-Agent': MOBILE_UA,
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'es-PE,es;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Sec-Fetch-Mode': 'navigate'
+                },
                 timeout: 10000
             });
 
@@ -358,8 +365,18 @@ async function procesarLote(tracks) {
                 return;
             }
 
+            // --- TELEMETRÍA DE FRACASO Y DESBLOQUEO DE COLA ---
             if (!match) {
-                console.log(`💀 [ABANDONO] Datos vacíos para: "${track.titulo}" tras reintentos.`);
+                console.log(`💀 [BLOQUEO/FALLO] Sin datos para: "${track.titulo}". Sumando fallo y avanzando.`);
+                if (!DRY_RUN) {
+                    const fallosActuales = track.monitor_fallos || 0;
+                    await supabase.from('tracks')
+                        .update({
+                            ultima_inspeccion: new Date().toISOString(),
+                            monitor_fallos: fallosActuales + 1 // Sumamos 1 al contador de fallos
+                        })
+                        .eq('id', track.id);
+                }
                 return;
             }
 
@@ -369,11 +386,12 @@ async function procesarLote(tracks) {
             if (!trackKey) return;
             const data = entities[trackKey].data;
 
+            // --- ESCUDO ANTI-NULL: Si SC no envía el dato, asumimos 0 para no romper las matemáticas ---
             const statsActuales = {
-                plays_actuales: data.playback_count,
-                likes: data.likes_count,
-                comentarios: data.comment_count,
-                reposts: data.reposts_count,
+                plays_actuales: data.playback_count || 0,
+                likes: data.likes_count || 0,
+                comentarios: data.comment_count || 0,
+                reposts: data.reposts_count || 0,
                 has_download: !!(data.download_count > 0 || data.downloadable)
             };
 
@@ -387,10 +405,20 @@ async function procesarLote(tracks) {
 
             if (veredicto.accion === 'DELETE') {
                 console.log(`${logPrefix} 💀 ELIMINAR: "${track.titulo}" | Razón: ${veredicto.razon}`);
-                if (!DRY_RUN) await supabase.from('tracks').delete().eq('id', track.id);
+                if (!DRY_RUN) {
+                    const {
+                        error
+                    } = await supabase.from('tracks').delete().eq('id', track.id);
+                    if (error) console.error(`❌ ERROR DB al eliminar "${track.titulo}":`, error.message);
+                }
             } else {
                 console.log(`${logPrefix} 💾 ACTUALIZAR: "${track.titulo}" | Fase: ${veredicto.nuevosDatos.fase || track.fase || 'normal'} | Hype: ${veredicto.nuevosDatos.hype_score.toFixed(1)} | Razón: ${veredicto.razon}`);
-                if (!DRY_RUN) await supabase.from('tracks').update(veredicto.nuevosDatos).eq('id', track.id);
+                if (!DRY_RUN) {
+                    const {
+                        error
+                    } = await supabase.from('tracks').update(veredicto.nuevosDatos).eq('id', track.id);
+                    if (error) console.error(`❌ ERROR DB al actualizar "${track.titulo}":`, error.message);
+                }
             }
 
         } catch (err) {
@@ -419,12 +447,17 @@ async function run() {
 
         const hace4Horas = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
 
-        const { data: tracks, error } = await supabase
+        const {
+            data: tracks,
+            error
+        } = await supabase
             .from('tracks')
             .select('*')
             .neq('fase', 'graduado')
             .lt('ultima_inspeccion', hace4Horas)
-            .order('fecha_ingreso', { ascending: true })
+            .order('fecha_ingreso', {
+                ascending: true
+            })
             .limit(100);
 
         if (error) {
