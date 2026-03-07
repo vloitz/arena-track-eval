@@ -445,7 +445,8 @@ async function run() {
         const tiempoRestanteMs = DEADLINE - Date.now();
         console.log(`\n🔄 --- CICLO ${ciclo} (Restan ${(tiempoRestanteMs/1000).toFixed(0)}s) ---`);
 
-        const hace4Horas = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+        // const hace4Horas = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(); //FIJO
+        const hace4Horas = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString(); // SOLO TEMPORAL
 
         const {
             data: tracks,
