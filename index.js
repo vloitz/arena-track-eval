@@ -370,7 +370,7 @@ async function run() {
                 // Aquí 'electronic', 'techno' o 'rock' son veneno mortal si aparecen como género principal.
                 const generoEsBasura = blacklist.some(word => {
                     const wordLimpia = word.toLowerCase().replace(/[^a-z0-9]/g, '');
-                    return generoPrincipal === wordLimpia;
+                    return generoPrincipal.includes(wordLimpia);
                 });
 
                 // NIVEL B: BLOQUEO DE TAGS CON "PERDÓN" (El "Equipaje")
@@ -400,8 +400,10 @@ async function run() {
                 // 4. NUEVO: Validar Juventud (Máximo 3 meses / 90 días)
                 const fechaPublicacion = new Date(t.created_at);
                 const hoy = new Date();
-                const diasAntiguedad = Math.floor((hoy - fechaPublicacion) / (1000 * 60 * 60 * 24));
-                const esReciente = diasAntiguedad <= 90;
+                const limiteMeses = 3;
+                // Calculamos la diferencia exacta en meses (promedio de 30.44 días)
+                const diferenciaMeses = (hoy - fechaPublicacion) / (1000 * 60 * 60 * 24 * 30.44);
+                const esReciente = diferenciaMeses <= limiteMeses;
 
                 const trackData = {
                     sc_id: t.id,
