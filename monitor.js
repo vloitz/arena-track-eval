@@ -57,7 +57,7 @@ function calcularHype(plays, likes, reposts, comments, hasDownload, dias) {
 
     const rawScore = (plays * POINTS.PLAY) + (likes * POINTS.LIKE) + (reposts * POINTS.REPOST) + (comments * POINTS.COMMENT) + puntosDescarga;
 
-    return rawScore / dias; // Velocidad de puntos por día
+    return parseFloat((rawScore / dias).toFixed(2)); // Velocidad de puntos por día (Redondeado)
 }
 
 // --- 3. EL CEREBRO DEL DETECTIVE (FASE 3.5 - LÓGICA DELTA) ---
@@ -402,9 +402,11 @@ async function procesarLote(tracks) {
                 has_download: !!(data.download_count > 0 || data.downloadable)
             };
 
-            const fechaIngreso = new Date(track.fecha_ingreso);
+            // --- 🛡️ CÁLCULO DE EDAD REAL (Justicia Matemática) ---
+            const fechaPublicacion = new Date(track.fecha_publicacion);
             const hoy = new Date();
-            const diasAntiguedad = Math.floor((hoy - fechaIngreso) / (1000 * 60 * 60 * 24));
+            // Usamos la fecha de nacimiento real para que el Hype Score sea preciso
+            const diasAntiguedad = Math.floor((hoy - fechaPublicacion) / (1000 * 60 * 60 * 24));
 
             const veredicto = juzgarTrack(track, statsActuales, diasAntiguedad);
 
