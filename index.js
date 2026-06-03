@@ -460,7 +460,7 @@ async function run() {
                     } else if (!cumpleTiempo) {
                         razon = `Duración fuera de rango (${durMinutos}m)`;
                     } else if (!esReciente) {
-                        razon = `Demasiado viejo (${diasAntiguedad} días)`;
+                        razon = `Demasiado viejo (más de 90 días)`;
                     } else {
                         razon = `Género/Tags no élite`;
                     }
