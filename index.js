@@ -532,6 +532,7 @@ async function run() {
 
     } catch (e) {
         console.error("❌ Error crítico en recolección:", e);
+        process.exit(1);
     } finally {
         if (browser) await browser.close();
         console.log("🔒 Navegador cerrado.");
