@@ -436,6 +436,31 @@ async function procesarLote(tracks) {
     }));
 }
 
+// --- FUNCIÓN DE PURGA: Mantenimiento de Espacio (Hard Delete) ---
+async function purgaHistorica() {
+    console.log("🧹 Iniciando purga de datos antiguos (Hard Delete)...");
+
+    // Calculamos la fecha límite (60 días atrás)
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() - 60);
+
+    // Ejecutamos la eliminación física en Supabase
+    const {
+        error
+    } = await supabase
+        .from('tracks')
+        .delete()
+        .eq('fase', 'descartado') // Filtro por estado
+        .eq('escuchado', false) // Filtro de seguridad (Solo no escuchados)
+        .lt('fecha_ingreso', fechaLimite.toISOString()); // Filtro de antigüedad
+
+    if (error) {
+        console.error('❌ Error en la purga:', error.message);
+    } else {
+        console.log('✅ Purga de datos antiguos completada con éxito.');
+    }
+}
+
 // --- 5. EJECUCIÓN PRINCIPAL ---
 async function run() {
     const jobStartTime = process.env.JOB_START_TIME ? parseInt(process.env.JOB_START_TIME) : Date.now();
@@ -500,6 +525,15 @@ async function run() {
     }
 
     console.log(`\n🏁 SESIÓN FINALIZADA.`);
+
+    // 🧹 EJECUTAR LA PURGA (Con Seguro de Vida)
+    try {
+        await purgaHistorica();
+    } catch (err) {
+        // Si falla, el script NO se detiene, solo avisa que la purga no se hizo
+        console.error("⚠️ Aviso: La purga automática falló, pero el sistema está a salvo:", err.message);
+    }
+
     console.log(`📊 Total Auditados: ${totalProcesados}`);
     console.log(`⏱️ Duración Total del Job: ${((Date.now() - jobStartTime)/1000).toFixed(1)}s / 900s`);
 }
