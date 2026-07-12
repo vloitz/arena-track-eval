@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const TARGET = 'https://soundcloud.com/search/sounds?q=house&filter.duration=medium&filter.created_at=last_hour';
 
 // --- CRITERIOS ÉLITE (DJ STYLE) ---
-const DURACION_MIN = 180000; // 3 minutos en ms
+const DURACION_MIN = 150000; // 2 minutos y 30 segundos en ms
 const DURACION_MAX = 480000; // 8 minutos en ms
 const GENEROS_ELITE = [
     'tech house', 'house', 'deep tech', 'minimal house', 'microhouse',
