@@ -397,8 +397,10 @@ async function run() {
                     return adnLimpio.includes(generoBuscadoLimpio);
                 });
 
-                // 4. NUEVO: Validar Juventud (Máximo 3 meses / 90 días)
-                const fechaPublicacion = new Date(t.created_at);
+                // 4. NUEVO: Validar Juventud (La VERDADERA fecha de publicación)
+                // Si el artista lo tuvo en privado, usamos display_date. Si no, usamos created_at.
+                const fechaFuente = t.display_date ? t.display_date : t.created_at;
+                const fechaPublicacion = new Date(fechaFuente);
                 const hoy = new Date();
                 const limiteMeses = 3;
                 // Calculamos la diferencia exacta en meses (promedio de 30.44 días)
@@ -450,7 +452,7 @@ async function run() {
                         likes: t.likes_count,
                         comentarios: t.comment_count,
                         reposts: t.reposts_count,
-                        fecha_publicacion: t.created_at,
+                        fecha_publicacion: fechaFuente, // Enviamos a la DB el verdadero estreno público
                         ultima_inspeccion: new Date().toISOString()
                     });
                 } else {
