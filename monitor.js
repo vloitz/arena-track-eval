@@ -247,6 +247,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
 
             if (esJoyaCulto || tienePulso) {
                 resultado.nuevosDatos.fase = 'repechaje';
+                resultado.nuevosDatos.likes_guardados = likes; // 📸 Toma la foto de los likes
+                resultado.nuevosDatos.comentarios_guardados = comentarios; // 📸 Toma la foto de los comentarios
                 resultado.razon = esJoyaCulto ? `🧟 REPECHAJE: Joya de Culto (Ratio: ${ratioCalidad.toFixed(1)}%)` : '🧟 REPECHAJE: Vida mínima detectada';
             }
 
@@ -271,8 +273,9 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
     //    - VEREDICTO: Si el Delta es 0, se elimina por falta de persistencia.
     // =================================================================================================
     if (track.fase === 'repechaje' && diasAntiguedad >= 40 && diasAntiguedad <= 45) {
-        const likesNuevosTemp2 = likes - (track.likes || 0);
-        const comentsNuevosTemp2 = comentarios - (track.comentarios || 0);
+        // Usamos la memoria fotográfica del Día 21
+        const likesNuevosTemp2 = likes - (track.likes_guardados || track.likes || 0);
+        const comentsNuevosTemp2 = comentarios - (track.comentarios_guardados || track.comentarios || 0);
 
         if (likesNuevosTemp2 === 0 && comentsNuevosTemp2 === 0 && !has_download) {
             resultado.accion = 'UPDATE';
@@ -295,7 +298,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
     // =================================================================================================
     if (track.fase === 'repechaje' && diasAntiguedad > 60) {
 
-        const likesNuevosFinal = likes - (track.likes || 0);
+        // Usamos la memoria fotográfica para el examen final
+        const likesNuevosFinal = likes - (track.likes_guardados || track.likes || 0);
         const ratioCalidad = (likes / (plays_actuales || 1)) * 100;
 
         const cumpleVolumen = likesNuevosFinal >= 5;
@@ -402,11 +406,12 @@ async function procesarLote(tracks) {
                 has_download: !!(data.download_count > 0 || data.downloadable)
             };
 
-            // --- 🛡️ CÁLCULO DE EDAD REAL (Justicia Matemática) ---
-            const fechaPublicacion = new Date(track.fecha_publicacion);
+            // --- 🛡️ CÁLCULO DE EDAD DE AUDITORÍA (La cura a la Paradoja del Tiempo) ---
+            // Usamos fecha_ingreso (cuándo lo descubrimos) y NO fecha_publicacion.
+            // Así le damos a cada track sus días justos para crecer desde que lo empezamos a vigilar.
+            const fechaIngreso = new Date(track.fecha_ingreso);
             const hoy = new Date();
-            // Usamos la fecha de nacimiento real para que el Hype Score sea preciso
-            const diasAntiguedad = Math.floor((hoy - fechaPublicacion) / (1000 * 60 * 60 * 24));
+            const diasAntiguedad = Math.floor((hoy - fechaIngreso) / (1000 * 60 * 60 * 24));
 
             const veredicto = juzgarTrack(track, statsActuales, diasAntiguedad);
 
@@ -431,7 +436,15 @@ async function procesarLote(tracks) {
             }
 
         } catch (err) {
-            console.error(`Error procesando ${track.titulo}:`, err.message);
+            console.error(`❌ Error fatal procesando ${track.titulo}:`, err.message);
+            // --- SALVAVIDAS ANTI-BUCLE ---
+            // Si el código explota, actualizamos la fecha de inspección para que el Verdugo
+            // no se quede atascado intentando leer este mismo track roto en el siguiente ciclo.
+            if (!DRY_RUN) {
+                await supabase.from('tracks').update({
+                    ultima_inspeccion: new Date().toISOString()
+                }).eq('id', track.id);
+            }
         }
     }));
 }
