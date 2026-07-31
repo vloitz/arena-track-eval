@@ -282,8 +282,9 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         // =================================================================================================
         if (track.fase === 'repechaje' && diasAntiguedad <= 45) {
             // Usamos la memoria fotográfica del Día 21
-            const likesNuevosTemp2 = likes - (track.likes_guardados || track.likes || 0);
-            const comentsNuevosTemp2 = comentarios - (track.comentarios_guardados || track.comentarios || 0);
+            // Usamos ?? para que respete el 0 si la foto se tomó con 0 likes
+            const likesNuevosTemp2 = likes - (track.likes_guardados ?? track.likes ?? 0);
+            const comentsNuevosTemp2 = comentarios - (track.comentarios_guardados ?? track.comentarios ?? 0);
 
             if (likesNuevosTemp2 === 0 && comentsNuevosTemp2 === 0 && !has_download) {
                 resultado.accion = 'UPDATE';
@@ -305,7 +306,8 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         // =================================================================================================
         if (track.fase === 'repechaje') {
             // Usamos la memoria fotográfica para el examen final
-            const likesNuevosFinal = likes - (track.likes_guardados || track.likes || 0);
+            // Usamos ?? para respetar el 0 absoluto de la memoria
+            const likesNuevosFinal = likes - (track.likes_guardados ?? track.likes ?? 0);
             const ratioCalidad = (likes / (plays_actuales || 1)) * 100;
 
             const cumpleVolumen = likesNuevosFinal >= 5;
