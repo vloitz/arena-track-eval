@@ -82,12 +82,14 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
     const proyeccionVistas30d = plays_actuales + (vistasPorDia * 30);
     const proyeccionHype30d = hypeScore * 30; // Estimación de tracción mensual
 
-    // 2. Factor Exponencial
+    // 2. Factor Exponencial (Corregido para División por Cero)
     let factorCrecimiento = 1;
     let mensajeCrecimiento = "Sin datos previos";
 
-    if (track.likes_iniciales !== null && track.likes_iniciales > 0) {
-        factorCrecimiento = likes / track.likes_iniciales;
+    if (track.likes_iniciales !== null) {
+        // Asignamos un mínimo de 1 a la base para evitar que 0 likes iniciales congele el factor
+        const baseLikes = track.likes_iniciales > 0 ? track.likes_iniciales : 1;
+        factorCrecimiento = likes / baseLikes;
         mensajeCrecimiento = `x${factorCrecimiento.toFixed(1)} (Ini:${track.likes_iniciales} -> Hoy:${likes})`;
     }
 
@@ -401,7 +403,12 @@ async function procesarLote(tracks) {
             const json = JSON.parse(match[1]);
             const entities = json.props?.pageProps?.initialStoreState?.entities?.tracks || {};
             const trackKey = Object.keys(entities).find(k => k.includes('soundcloud:tracks'));
-            if (!trackKey) return;
+
+            // --- BLOQUEO DE SILENCIO MORTAL ---
+            // Si SC oculta los datos, lanzamos un error agresivo para obligar al código
+            // a caer en el 'catch' y activar el salvavidas de la ultima_inspeccion.
+            if (!trackKey) throw new Error("Estructura JSON alterada o track bloqueado por región.");
+
             const data = entities[trackKey].data;
 
             // --- EL ESCUDO DE DIAMANTES (Respetar el trabajo del recolector) ---
