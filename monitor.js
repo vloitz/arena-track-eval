@@ -404,13 +404,17 @@ async function procesarLote(tracks) {
             if (!trackKey) return;
             const data = entities[trackKey].data;
 
+            // --- EL ESCUDO DE DIAMANTES (Respetar el trabajo del recolector) ---
+            const tieneDescargaNativa = !!(data.download_count > 0 || data.downloadable);
+            const esDiamante = track.has_download === true || tieneDescargaNativa;
+
             // --- ESCUDO ANTI-NULL: Si SC no envía el dato, asumimos 0 para no romper las matemáticas ---
             const statsActuales = {
                 plays_actuales: data.playback_count || 0,
                 likes: data.likes_count || 0,
                 comentarios: data.comment_count || 0,
                 reposts: data.reposts_count || 0,
-                has_download: !!(data.download_count > 0 || data.downloadable)
+                has_download: esDiamante
             };
 
             // --- 🛡️ CÁLCULO DE EDAD DE AUDITORÍA (La cura a la Paradoja del Tiempo) ---
@@ -511,7 +515,7 @@ async function run() {
             .neq('fase', 'graduado')
             .neq('fase', 'descartado')
             .lt('ultima_inspeccion', hace4Horas)
-            .order('fecha_ingreso', {
+            .order('ultima_inspeccion', { // <--- EL CAMBIO CRÍTICO: El que más ha esperado pasa primero
                 ascending: true
             })
             .limit(100);
