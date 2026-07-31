@@ -60,6 +60,7 @@ function calcularHype(plays, likes, reposts, comments, hasDownload, dias) {
     return parseFloat((rawScore / dias).toFixed(2)); // Velocidad de puntos por día (Redondeado)
 }
 
+
 // --- 3. EL CEREBRO DEL DETECTIVE (FASE 3.5 - LÓGICA DELTA) ---
 function juzgarTrack(track, statsActuales, diasAntiguedad) {
     const {
@@ -108,40 +109,54 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         }
     };
 
+    // --- 0. PROTECCIÓN DE MEMORIA FOTOGRÁFICA ---
+    // Acarreamos la memoria intacta. Jamás se sobrescribe accidentalmente.
+    if (track.likes_guardados !== null && track.likes_guardados !== undefined) {
+        resultado.nuevosDatos.likes_guardados = track.likes_guardados;
+    }
+    if (track.comentarios_guardados !== null && track.comentarios_guardados !== undefined) {
+        resultado.nuevosDatos.comentarios_guardados = track.comentarios_guardados;
+    }
+
     // =================================================================================================
-    // 🚉 ESTACIÓN 1: PRUEBA DE VIDA (Día 3.5 - El Primer Filtro)
-    // =================================================================================================
-    // OBJETIVO: Eliminar el "Ruido Blanco" (Tracks que existen pero nadie nota o valora).
-    // JUSTICIA: Se aplica un criterio de "Equilibrio y Tolerancia" para no borrar falsos negativos.
-    //
-    // LÓGICA DE SUPERVIVENCIA (Debe cumplir AL MENOS UNA):
-    //
-    // 1. 💎 FACTOR DIAMANTE (Prioridad Máxima):
-    //    - ¿El track tiene descargas registradas?
-    //    - VEREDICTO: INMUNIDAD TOTAL. Se salva siempre. Es útil para el DJ.
-    //
-    // 2. ❤️ CALIDAD (Interacción Humana):
-    //    - Se calcula el DELTA (Lo nuevo ganado en estos 3 días).
-    //    - Fórmula: (Likes_Hoy - Likes_Ini) + (Coments_Hoy - Coments_Ini).
-    //    - REGLA: Si Delta >= 1 (Al menos una persona real reaccionó).
-    //    - VEREDICTO: SE SALVA. Hay conexión humana, aunque sea pequeña (Tortugas).
-    //
-    // 3. 📈 TRACCIÓN (La "Válvula de Escape" / Tolerancia):
-    //    - Caso especial: Track con muchas vistas pero 0 likes (Escenario "Tímido").
-    //    - Se calcula el Delta de Vistas (Vistas_Hoy - Vistas_Ini).
-    //    - REGLA: Si Delta_Vistas >= 50 (Ganó tracción significativa de audiencia).
-    //    - VEREDICTO: SE SALVA (Condicional).
-    //      * Justificación: Si duplicó audiencia o creció mucho, merece una 2da oportunidad
-    //      * hasta el Día 7, aunque la gente no de like. Evita borrar "Hits Pasivos".
-    //
-    // 💀 CRITERIO DE ELIMINACIÓN (La Purga):
-    //    - Si NO es Diamante...
-    //    - Y NO tuvo ninguna interacción nueva...
-    //    - Y NO tuvo tracción significativa...
-    //    - ENTONCES: Es "Ruido". Ocupa espacio y no aporta valor. -> DELETE.
+    // 🚪 SISTEMA DE SALAS DE TIEMPO (MUTUAMENTE EXCLUYENTES)
     // =================================================================================================
 
-    if (diasAntiguedad >= UMBRALES.E1_DIAS_MIN && diasAntiguedad < UMBRALES.E1_DIAS_MAX) {
+    if (diasAntiguedad < UMBRALES.E1_DIAS_MIN) {
+        // Fase de guardería. El track es muy joven, se queda "En observación" y solo actualiza métricas.
+    } else if (diasAntiguedad >= UMBRALES.E1_DIAS_MIN && diasAntiguedad < UMBRALES.E2_DIAS_MIN) {
+        // =================================================================================================
+        // 🚉 ESTACIÓN 1: PRUEBA DE VIDA (Día 3.5 - El Primer Filtro)
+        // =================================================================================================
+        // OBJETIVO: Eliminar el "Ruido Blanco" (Tracks que existen pero nadie nota o valora).
+        // JUSTICIA: Se aplica un criterio de "Equilibrio y Tolerancia" para no borrar falsos negativos.
+        //
+        // LÓGICA DE SUPERVIVENCIA (Debe cumplir AL MENOS UNA):
+        //
+        // 1. 💎 FACTOR DIAMANTE (Prioridad Máxima):
+        //    - ¿El track tiene descargas registradas?
+        //    - VEREDICTO: INMUNIDAD TOTAL. Se salva siempre. Es útil para el DJ.
+        //
+        // 2. ❤️ CALIDAD (Interacción Humana):
+        //    - Se calcula el DELTA (Lo nuevo ganado en estos 3 días).
+        //    - Fórmula: (Likes_Hoy - Likes_Ini) + (Coments_Hoy - Coments_Ini).
+        //    - REGLA: Si Delta >= 1 (Al menos una persona real reaccionó).
+        //    - VEREDICTO: SE SALVA. Hay conexión humana, aunque sea pequeña (Tortugas).
+        //
+        // 3. 📈 TRACCIÓN (La "Válvula de Escape" / Tolerancia):
+        //    - Caso especial: Track con muchas vistas pero 0 likes (Escenario "Tímido").
+        //    - Se calcula el Delta de Vistas (Vistas_Hoy - Vistas_Ini).
+        //    - REGLA: Si Delta_Vistas >= 50 (Ganó tracción significativa de audiencia).
+        //    - VEREDICTO: SE SALVA (Condicional).
+        //      * Justificación: Si duplicó audiencia o creció mucho, merece una 2da oportunidad
+        //      * hasta el Día 7, aunque la gente no de like. Evita borrar "Hits Pasivos".
+        //
+        // 💀 CRITERIO DE ELIMINACIÓN (La Purga):
+        //    - Si NO es Diamante...
+        //    - Y NO tuvo ninguna interacción nueva...
+        //    - Y NO tuvo tracción significativa...
+        //    - ENTONCES: Es "Ruido". Ocupa espacio y no aporta valor. -> DELETE.
+        // =================================================================================================
 
         // A. CÁLCULO DE DELTAS (Crecimiento Real vs. Foto Inicial)
         // Usamos (|| 0) por si es un track viejo sin datos iniciales
@@ -166,26 +181,23 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
             resultado.accion = 'UPDATE';
             resultado.nuevosDatos.fase = 'descartado';
             resultado.razon = `💀 ELIMINADO: Ruido Blanco (0 Reacción, +${deltaPlays} Vistas insuficientes)`;
-            return resultado;
         }
-    }
-
-    // =================================================================================================
-    // 🚉 ESTACIÓN 2: AUDITORÍA DE RENDIMIENTO (Día 7 - 11)
-    // =================================================================================================
-    // OBJETIVO: Evaluar si la inversión de "Tracción" valió la pena y detectar paros cardíacos.
-    //
-    // 1. 🔍 AUDITORÍA FINAL (Anti-Bot / Ruido):
-    //    - Si después de 7 días el track sigue con 0 interacciones humanas.
-    //    - JUSTICIA: No se puede vivir solo de vistas por siempre. La tolerancia termina aquí.
-    //    - VEREDICTO: Se confirma como "Basura" o "Falsa Promesa". -> DELETE.
-    //
-    // 2. 📉 CHEQUEO DE INERCIA (Movimiento Reciente):
-    //    - Se calcula el cambio desde la última revisión (Día 3.5).
-    //    - REGLA: Si no ha ganado ni 1 vista ni 1 like desde la inspección anterior.
-    //    - VEREDICTO: Se marca como "hibernando". Se le da chance hasta el Día 21.
-    // =================================================================================================
-    if (diasAntiguedad >= UMBRALES.E2_DIAS_MIN && diasAntiguedad < UMBRALES.E2_DIAS_MAX) {
+    } else if (diasAntiguedad >= UMBRALES.E2_DIAS_MIN && diasAntiguedad < UMBRALES.E3_DIAS_MIN) {
+        // =================================================================================================
+        // 🚉 ESTACIÓN 2: AUDITORÍA DE RENDIMIENTO (Día 7 - 11)
+        // =================================================================================================
+        // OBJETIVO: Evaluar si la inversión de "Tracción" valió la pena y detectar paros cardíacos.
+        //
+        // 1. 🔍 AUDITORÍA FINAL (Anti-Bot / Ruido):
+        //    - Si después de 7 días el track sigue con 0 interacciones humanas.
+        //    - JUSTICIA: No se puede vivir solo de vistas por siempre. La tolerancia termina aquí.
+        //    - VEREDICTO: Se confirma como "Basura" o "Falsa Promesa". -> DELETE.
+        //
+        // 2. 📉 CHEQUEO DE INERCIA (Movimiento Reciente):
+        //    - Se calcula el cambio desde la última revisión (Día 3.5).
+        //    - REGLA: Si no ha ganado ni 1 vista ni 1 like desde la inspección anterior.
+        //    - VEREDICTO: Se marca como "hibernando". Se le da chance hasta el Día 21.
+        // =================================================================================================
 
         const deltaRecienteLikes = likes - (track.likes || 0);
         const deltaRecientePlays = plays_actuales - (track.plays_actuales || 0);
@@ -195,11 +207,9 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
             resultado.accion = 'UPDATE';
             resultado.nuevosDatos.fase = 'descartado';
             resultado.razon = '💀 Auditoría Fallida: 7 días sin validación humana (La apuesta de tracción falló)';
-            return resultado;
         }
-
         // B. Chequeo de Movimiento (Inercia)
-        if (deltaRecienteLikes === 0 && deltaRecientePlays === 0) {
+        else if (deltaRecienteLikes === 0 && deltaRecientePlays === 0) {
             resultado.nuevosDatos.fase = 'hibernando';
             resultado.razon = '💤 Inercia Cero: Sin actividad desde la revisión del Día 3.5';
         }
@@ -207,26 +217,23 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
         else if (factorCrecimiento >= 2) {
             resultado.razon = `🚀 Impulso mantenido: ${mensajeCrecimiento}`;
         }
-    }
-
-
-    // =================================================================================================
-    // 🚉 ESTACIÓN 3: EL JUICIO FINAL (Día 21+) - FIN DE TEMPORADA 1
-    // =================================================================================================
-    // OBJETIVO: Selección de Élite. Decidir quién entra a la maleta y quién merece una última chance.
-    //
-    // 🏆 CRITERIO DE GRADUACIÓN (Pasa a la Maleta):
-    //    - El track es un "Hit" (Hype > 50), explotó (x3) o tiene muchos comentarios.
-    //    - Posee el FACTOR DIAMANTE (Downloads > 0). Es una herramienta útil hoy.
-    //
-    // 🧟 CRITERIO DE REPECHAJE (Temporada 2):
-    //    - JUSTICIA PARA TORTUGAS: Si no es hit, pero tiene un RATIO DE CALIDAD > 5%.
-    //    - PERSISTENCIA: Si el track superó la hibernación y ganó vida recientemente.
-    //
-    // 🗑️ CRITERIO DE PURGA (Eliminación):
-    //    - No logró graduarse ni demostró calidad de culto en 21 días.
-    // =================================================================================================
-    if (diasAntiguedad >= UMBRALES.E3_DIAS_MIN) {
+    } else if (diasAntiguedad >= UMBRALES.E3_DIAS_MIN && diasAntiguedad < 40) {
+        // =================================================================================================
+        // 🚉 ESTACIÓN 3: EL JUICIO FINAL (Día 21+) - FIN DE TEMPORADA 1
+        // =================================================================================================
+        // OBJETIVO: Selección de Élite. Decidir quién entra a la maleta y quién merece una última chance.
+        //
+        // 🏆 CRITERIO DE GRADUACIÓN (Pasa a la Maleta):
+        //    - El track es un "Hit" (Hype > 50), explotó (x3) o tiene muchos comentarios.
+        //    - Posee el FACTOR DIAMANTE (Downloads > 0). Es una herramienta útil hoy.
+        //
+        // 🧟 CRITERIO DE REPECHAJE (Temporada 2):
+        //    - JUSTICIA PARA TORTUGAS: Si no es hit, pero tiene un RATIO DE CALIDAD > 5%.
+        //    - PERSISTENCIA: Si el track superó la hibernación y ganó vida recientemente.
+        //
+        // 🗑️ CRITERIO DE PURGA (Eliminación):
+        //    - No logró graduarse ni demostró calidad de culto en 21 días.
+        // =================================================================================================
 
         // Cálculo de Ratio de Calidad (Likes / Plays)
         const ratioCalidad = (likes / (plays_actuales || 1)) * 100;
@@ -239,7 +246,6 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
             resultado.nuevosDatos.fase = 'graduado';
             resultado.razon = esDiamante ? '🏆 GRADUADO: Factor Diamante' : `🏆 GRADUADO: Rendimiento Alto (Hype: ${hypeScore.toFixed(1)})`;
         }
-
         // B. REPECHAJE (Las Tortugas de Calidad)
         else {
             const esJoyaCulto = ratioCalidad >= UMBRALES.E3_RATIO_MIN;
@@ -247,78 +253,77 @@ function juzgarTrack(track, statsActuales, diasAntiguedad) {
 
             if (esJoyaCulto || tienePulso) {
                 resultado.nuevosDatos.fase = 'repechaje';
-                resultado.nuevosDatos.likes_guardados = likes; // 📸 Toma la foto de los likes
-                resultado.nuevosDatos.comentarios_guardados = comentarios; // 📸 Toma la foto de los comentarios
+
+                // 📸 TOMA LA FOTO SOLO SI NO EXISTE PREVIAMENTE
+                if (track.likes_guardados == null || track.likes_guardados === undefined) {
+                    resultado.nuevosDatos.likes_guardados = likes;
+                    resultado.nuevosDatos.comentarios_guardados = comentarios;
+                }
+
                 resultado.razon = esJoyaCulto ? `🧟 REPECHAJE: Joya de Culto (Ratio: ${ratioCalidad.toFixed(1)}%)` : '🧟 REPECHAJE: Vida mínima detectada';
             }
-
             // C. PURGA (El Fin)
             else {
                 resultado.accion = 'UPDATE';
                 resultado.nuevosDatos.fase = 'descartado';
                 resultado.razon = `🗑️ Purga: Ni éxito ni calidad de culto en 21 días (Ratio: ${ratioCalidad.toFixed(1)}%)`;
-                return resultado;
+            }
+        }
+    } else if (diasAntiguedad >= 40 && diasAntiguedad < 60) {
+        // =================================================================================================
+        // 🚉 ESTACIÓN 4: AUDITORÍA DE ESTABILIDAD (Día 40 - 45) - MITAD DE TEMPORADA 2
+        // =================================================================================================
+        // OBJETIVO: Limpiar el repechaje. No dejar que tracks estancados ocupen espacio hasta el día 60.
+        //
+        // ⚖️ CRITERIO DE CONCORDANCIA:
+        //    - Se compara el estado actual contra el estado del Día 21 (Fin de T1).
+        //    - REGLA: Debe haber ganado al menos 1 Interacción Humana (Like/Coment) en estas 3 semanas.
+        //    - VEREDICTO: Si el Delta es 0, se elimina por falta de persistencia.
+        // =================================================================================================
+        if (track.fase === 'repechaje' && diasAntiguedad <= 45) {
+            // Usamos la memoria fotográfica del Día 21
+            const likesNuevosTemp2 = likes - (track.likes_guardados || track.likes || 0);
+            const comentsNuevosTemp2 = comentarios - (track.comentarios_guardados || track.comentarios || 0);
+
+            if (likesNuevosTemp2 === 0 && comentsNuevosTemp2 === 0 && !has_download) {
+                resultado.accion = 'UPDATE';
+                resultado.nuevosDatos.fase = 'descartado';
+                resultado.razon = '💀 Estación 4: Sin señales de vida en la primera mitad del repechaje';
+            }
+        }
+    } else if (diasAntiguedad >= 60) {
+        // =================================================================================================
+        // 🏁 ESTACIÓN 5: EL JUICIO FINAL DEL TORNEO (Día 60+) - FIN DE TEMPORADA 2
+        // =================================================================================================
+        // OBJETIVO: Graduación Definitiva o Purga Total. El límite final de estancia en la base de datos.
+        //
+        // 💎 CRITERIO DE SUPERVIVENCIA (Debe cumplir UNA):
+        //    1. VOLUMEN: Ganó +5 likes desde que entró en repechaje.
+        //    2. CALIDAD (Ratio): Mantiene un Ratio de Calidad (Likes/Plays) >= 5%.
+        //
+        // VEREDICTO: Si cumple, se gradúa como "Joya de Culto". Si no, eliminación permanente.
+        // =================================================================================================
+        if (track.fase === 'repechaje') {
+            // Usamos la memoria fotográfica para el examen final
+            const likesNuevosFinal = likes - (track.likes_guardados || track.likes || 0);
+            const ratioCalidad = (likes / (plays_actuales || 1)) * 100;
+
+            const cumpleVolumen = likesNuevosFinal >= 5;
+            const cumpleRatio = ratioCalidad >= UMBRALES.E3_RATIO_MIN; // Usamos el 5%
+
+            if (cumpleVolumen || cumpleRatio) {
+                resultado.nuevosDatos.fase = 'graduado';
+                resultado.razon = cumpleRatio ? `🎓 GRADUADO TARDÍO: Joya de Culto (Ratio: ${ratioCalidad.toFixed(1)}%)` : `🎓 GRADUADO TARDÍO: Crecimiento por Volumen (+${likesNuevosFinal} likes)`;
+            } else {
+                resultado.accion = 'UPDATE';
+                resultado.nuevosDatos.fase = 'descartado';
+                resultado.razon = `💀 Purga Final: No alcanzó los estándares del torneo (Volumen: +${likesNuevosFinal}, Ratio: ${ratioCalidad.toFixed(1)}%)`;
             }
         }
     }
 
-    // =================================================================================================
-    // 🚉 ESTACIÓN 4: AUDITORÍA DE ESTABILIDAD (Día 40 - 45) - MITAD DE TEMPORADA 2
-    // =================================================================================================
-    // OBJETIVO: Limpiar el repechaje. No dejar que tracks estancados ocupen espacio hasta el día 60.
-    //
-    // ⚖️ CRITERIO DE CONCORDANCIA:
-    //    - Se compara el estado actual contra el estado del Día 21 (Fin de T1).
-    //    - REGLA: Debe haber ganado al menos 1 Interacción Humana (Like/Coment) en estas 3 semanas.
-    //    - VEREDICTO: Si el Delta es 0, se elimina por falta de persistencia.
-    // =================================================================================================
-    if (track.fase === 'repechaje' && diasAntiguedad >= 40 && diasAntiguedad <= 45) {
-        // Usamos la memoria fotográfica del Día 21
-        const likesNuevosTemp2 = likes - (track.likes_guardados || track.likes || 0);
-        const comentsNuevosTemp2 = comentarios - (track.comentarios_guardados || track.comentarios || 0);
-
-        if (likesNuevosTemp2 === 0 && comentsNuevosTemp2 === 0 && !has_download) {
-            resultado.accion = 'UPDATE';
-            resultado.nuevosDatos.fase = 'descartado';
-            resultado.razon = '💀 Estación 4: Sin señales de vida en la primera mitad del repechaje';
-            return resultado;
-        }
-    }
-
-    // =================================================================================================
-    // 🏁 ESTACIÓN 5: EL JUICIO FINAL DEL TORNEO (Día 60+) - FIN DE TEMPORADA 2
-    // =================================================================================================
-    // OBJETIVO: Graduación Definitiva o Purga Total. El límite final de estancia en la base de datos.
-    //
-    // 💎 CRITERIO DE SUPERVIVENCIA (Debe cumplir UNA):
-    //    1. VOLUMEN: Ganó +5 likes desde que entró en repechaje.
-    //    2. CALIDAD (Ratio): Mantiene un Ratio de Calidad (Likes/Plays) >= 5%.
-    //
-    // VEREDICTO: Si cumple, se gradúa como "Joya de Culto". Si no, eliminación permanente.
-    // =================================================================================================
-    if (track.fase === 'repechaje' && diasAntiguedad > 60) {
-
-        // Usamos la memoria fotográfica para el examen final
-        const likesNuevosFinal = likes - (track.likes_guardados || track.likes || 0);
-        const ratioCalidad = (likes / (plays_actuales || 1)) * 100;
-
-        const cumpleVolumen = likesNuevosFinal >= 5;
-        const cumpleRatio = ratioCalidad >= UMBRALES.E3_RATIO_MIN; // Usamos el 5%
-
-        if (cumpleVolumen || cumpleRatio) {
-            resultado.nuevosDatos.fase = 'graduado';
-            resultado.razon = cumpleRatio ? `🎓 GRADUADO TARDÍO: Joya de Culto (Ratio: ${ratioCalidad.toFixed(1)}%)` : `🎓 GRADUADO TARDÍO: Crecimiento por Volumen (+${likesNuevosFinal} likes)`;
-        } else {
-            resultado.accion = 'UPDATE';
-            resultado.nuevosDatos.fase = 'descartado';
-            resultado.razon = `💀 Purga Final: No alcanzó los estándares del torneo (Volumen: +${likesNuevosFinal}, Ratio: ${ratioCalidad.toFixed(1)}%)`;
-        }
-    }
-
-    return resultado; // <--- ESTA ES LA LÍNEA CLAVE QUE DEBES AÑADIR
-
+    return resultado;
 }
-
 
 // --- FUNCIÓN AUXILIAR: REINTENTO INTELIGENTE ---
 async function fetchConReintento(url, titulo) {
